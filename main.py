@@ -158,6 +158,11 @@ def save_budget_data(data, filename="my_budget_data.json"):
                 if 'dates' in transfer and transfer['dates']:
                     transfer['dates'] = [d.isoformat() for d in transfer['dates']]
 
+        # New: Serialize income dates
+        if 'income' in serializable_data and 'dates' in serializable_data['income'] and serializable_data['income'][
+            'dates']:
+            serializable_data['income']['dates'] = [d.isoformat() for d in serializable_data['income']['dates']]
+
         with open(filename, 'w') as f:
             json.dump(serializable_data, f, indent=4)
         print(f"\nBudget configuration saved to '{filename}'.")
@@ -186,6 +191,10 @@ def load_budget_data(filename="my_budget_data.json"):
                     if 'dates' in transfer and transfer['dates']:
                         transfer['dates'] = [datetime.fromisoformat(d).date() for d in transfer['dates']]
 
+            # New: Deserialize income dates
+            if 'income' in data and 'dates' in data['income'] and data['income']['dates']:
+                data['income']['dates'] = [datetime.fromisoformat(d).date() for d in data['income']['dates']]
+
             data.pop('income_pay_dates', None)
 
             print(f"Budget configuration loaded from '{filename}'.")
@@ -196,6 +205,43 @@ def load_budget_data(filename="my_budget_data.json"):
     except Exception as e:
         print(f"An unexpected error occurred while loading budget data: {e}")
         return None
+
+
+def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, initial_day=None):
+    """
+    Generates a list of recurring dates based on frequency, adjusting for weekends/holidays.
+    """
+    dates = []
+    current_date = start_date
+    holidays_set = holidays_set if holidays_set is not None else set()
+
+    while current_date <= end_date:
+        adjusted_date = current_date
+        while not is_business_day(adjusted_date, holidays_set):
+            adjusted_date -= timedelta(days=1)
+        dates.append(adjusted_date)
+
+        if frequency == 'weekly':
+            current_date += timedelta(weeks=1)
+        elif frequency == 'bi-weekly':
+            current_date += timedelta(weeks=2)
+        elif frequency == 'monthly':
+            # Handle month rollover for monthly dates
+            try:
+                current_date = datetime(current_date.year, current_date.month + 1, current_date.day).date()
+            except ValueError:
+                # If day is too large for the next month (e.g., Jan 31 -> Feb 28/29)
+                current_date = datetime(current_date.year, current_date.month + 2, 1).date() - timedelta(days=1)
+
+        elif frequency == 'quarterly':
+            current_date = datetime(current_date.year, current_date.month + 3, current_date.day).date()
+        elif frequency == 'yearly':
+            current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
+        else:
+            break
+
+    # Remove dates that are before the current date
+    return sorted([d for d in dates if d >= datetime.now().date()])
 
 
 # --- Main Budget Planning Function ---
@@ -209,7 +255,11 @@ def plan_budget_for_year():
     budget_config_filename = "my_budget_data.json"
 
     budget_config = {
-        'income_amount': 0.0,
+        'income': {
+            'amount': 0.0,
+            'frequency': 'bi-weekly',
+            'dates': []
+        },
         'expense_categories': {
             'Groceries': [],
             'Bills': [],
@@ -246,21 +296,36 @@ def plan_budget_for_year():
     if holidays:
         print(f"Loaded {len(holidays)} holidays.")
     else:
-        print("No holidays loaded or file not found. Paydays will only adjust for weekends.")
+        print("No holidays loaded or file not found. Payday adjustments will only consider weekends.")
 
     print("\n--- Income Information ---")
-    current_income = budget_config['income_amount']
-    if current_income > 0:
-        print(f"Current bi-monthly income after taxes: ${current_income:.2f}")
-        if get_yes_no_input("Do you want to update your income amount?"):
-            budget_config['income_amount'] = get_float_input("Enter your new bi-monthly income after taxes")
-    else:
-        budget_config['income_amount'] = get_float_input("Enter your bi-monthly income after taxes")
+    current_income_amount = budget_config['income']['amount']
+    current_income_freq = budget_config['income']['frequency']
 
-    income_pay_dates = get_bi_monthly_pay_dates(today, end_of_year, holidays)
-    print("\nCalculated Pay Dates for the rest of the year (adjusted for weekends/holidays):")
-    for date in income_pay_dates:
-        print(f"- {date.strftime('%Y-%m-%d')}")
+    if current_income_amount > 0:
+        print(f"Current income: ${current_income_amount:.2f} ({current_income_freq})")
+        if get_yes_no_input("Do you want to update your income information?"):
+            budget_config['income']['amount'] = get_float_input("Enter your new income amount after taxes")
+            budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
+            budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+    else:
+        budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
+        budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
+        budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+
+    # Recalculate income dates
+    if budget_config['income']['frequency'] == 'bi-monthly':
+        budget_config['income']['dates'] = get_bi_monthly_pay_dates(today, end_of_year, holidays)
+    elif budget_config['income']['frequency'] != 'one-time' and budget_config['income']['dates']:
+        budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_of_year,
+                                                               budget_config['income']['frequency'], holidays)
+
+    if not budget_config['income']['dates']:
+        print("Warning: No pay dates were generated for the rest of the year. Please check your input.")
+    else:
+        print("\nCalculated Pay Dates for the rest of the year (adjusted for weekends/holidays):")
+        for date in budget_config['income']['dates']:
+            print(f"- {date.strftime('%Y-%m-%d')}")
 
     print("\n--- Manage Your Expenses ---")
 
@@ -534,85 +599,25 @@ def plan_budget_for_year():
             if not get_yes_no_input("Add another savings transfer?"):
                 break
 
-    # --- Financial Planning Calculations ---
     # New logic to pre-calculate all recurring dates
+    # --- Financial Planning Calculations ---
+
     all_expenses_to_process = []
     for category_list in budget_config['expense_categories'].values():
         for item in category_list:
             if item['dates'] and item['frequency'] not in ['weekly', 'one-time']:
-                new_dates = []
-                # Assuming the first date is the starting point for recurrence
-                start_date = item['dates'][0]
-                current_date = start_date
-
-                while current_date <= end_of_year and (
-                        item['expiry_date'] is None or current_date <= item['expiry_date']):
-                    adjusted_date = current_date
-                    while not is_business_day(adjusted_date, holidays):
-                        adjusted_date -= timedelta(days=1)
-                    new_dates.append(adjusted_date)
-
-                    if item['frequency'] == 'bi-weekly':
-                        current_date += timedelta(weeks=2)
-                    elif item['frequency'] == 'monthly':
-                        # Handle month rollover for monthly dates
-                        if current_date.month == 12:
-                            current_date = datetime(current_date.year + 1, 1, current_date.day).date()
-                        else:
-                            next_month_year = current_date.year
-                            next_month = current_date.month + 1
-                            last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
-                            day_to_use = min(current_date.day, last_day_of_next_month)
-                            current_date = datetime(next_month_year, next_month, day_to_use).date()
-                    elif item['frequency'] == 'quarterly':
-                        if current_date.month + 3 <= 12:
-                            next_month_year = current_date.year
-                            next_month = current_date.month + 3
-                        else:
-                            next_month_year = current_date.year + 1
-                            next_month = (current_date.month + 3) % 12
-                            if next_month == 0: next_month = 12
-
-                        last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
-                        day_to_use = min(current_date.day, last_day_of_next_month)
-                        current_date = datetime(next_month_year, next_month, day_to_use).date()
-                    elif item['frequency'] == 'yearly':
-                        current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
-                    else:
-                        break  # Should not happen
-
-                item['dates'] = new_dates
+                new_dates = get_recurring_dates(item['dates'][0], end_of_year, item['frequency'], holidays)
+                item['dates'] = [d for d in new_dates if item['expiry_date'] is None or d <= item['expiry_date']]
         all_expenses_to_process.extend(category_list)
 
     all_savings_to_process = []
     for transfer in budget_config['savings_transfers']:
         if transfer['dates'] and transfer['frequency'] not in ['weekly', 'one-time']:
-            new_dates = []
-            start_date = transfer['dates'][0]
-            current_date = start_date
-
-            while current_date <= end_of_year:
-                adjusted_date = current_date
-                while not is_business_day(adjusted_date, holidays):
-                    adjusted_date -= timedelta(days=1)
-                new_dates.append(adjusted_date)
-
-                if transfer['frequency'] == 'bi-weekly':
-                    current_date += timedelta(weeks=2)
-                elif transfer['frequency'] == 'monthly':
-                    if current_date.month == 12:
-                        current_date = datetime(current_date.year + 1, 1, current_date.day).date()
-                    else:
-                        next_month_year = current_date.year
-                        next_month = current_date.month + 1
-                        last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
-                        day_to_use = min(current_date.day, last_day_of_next_month)
-                        current_date = datetime(next_month_year, next_month, day_to_use).date()
-                else:
-                    break
-
-            transfer['dates'] = new_dates
+            transfer['dates'] = get_recurring_dates(transfer['dates'][0], end_of_year, transfer['frequency'], holidays)
         all_savings_to_process.append(transfer)
+
+    # New: Pre-calculate all pay dates
+    all_income_paydates = budget_config['income']['dates']
 
     start_of_current_week = today - timedelta(days=today.weekday())
 
@@ -634,9 +639,10 @@ def plan_budget_for_year():
         weekly_total_expenses = 0.0
         weekly_savings_transfer = 0.0
 
-        for pay_date in income_pay_dates:
-            if start_of_current_week <= pay_date <= week_end:
-                weekly_income += budget_config['income_amount']
+        # New: Use pre-calculated paydates to check for income
+        for pay_date in all_income_paydates:
+            if week_start <= pay_date <= week_end:
+                weekly_income += budget_config['income']['amount']
 
         for item in all_expenses_to_process:
             amount = item['amount']
@@ -733,7 +739,11 @@ def plan_budget_for_year():
     # Reset expenses and savings to original state before saving
     budget_config['expense_categories'] = {
         'Groceries': [item for item in all_expenses_to_process if item['name'] == 'Groceries'],
-        'Bills': [item for item in all_expenses_to_process if 'Bill' in item['name']],
+        'Bills': [item for item in all_expenses_to_process if
+                  item['name'] not in [s['name'] for s in budget_config['expense_categories']['Streaming Services']] and
+                  item['name'] not in [m['name'] for m in budget_config['expense_categories']['Misc Monthly']] and item[
+                      'name'] not in [o['name'] for o in budget_config['expense_categories']['One-Time']] and item[
+                      'name'] != 'Groceries'],
         'Streaming Services': [item for item in all_expenses_to_process if 'Streaming' in item['name']],
         'Misc Monthly': [item for item in all_expenses_to_process if 'Misc Monthly' in item['name']],
         'One-Time': [item for item in all_expenses_to_process if 'One-Time' in item['name']]
