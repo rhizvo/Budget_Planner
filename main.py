@@ -114,7 +114,7 @@ def get_bi_monthly_pay_dates(start_date, end_date, holidays_set):
 
         # --- Calculate 15th of the month ---
         target_15th = datetime(year, month, 15).date()
-        if target_15th >= start_date and target_15th <= end_date:
+        if start_date <= target_15th <= end_date:
             adjusted_date = target_15th
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
@@ -123,13 +123,12 @@ def get_bi_monthly_pay_dates(start_date, end_date, holidays_set):
         # --- Calculate last day of the month ---
         last_day_of_month_num = calendar.monthrange(year, month)[1]
         target_last_day = datetime(year, month, last_day_of_month_num).date()
-        if target_last_day >= start_date and target_last_day <= end_date:
+        if start_date <= target_last_day <= end_date:
             adjusted_date = target_last_day
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
             pay_dates.append(adjusted_date)
 
-        # Move to the next month
         if month == 12:
             current_iter_date = datetime(year + 1, 1, 1).date()
         else:
@@ -143,19 +142,9 @@ def get_bi_monthly_pay_dates(start_date, end_date, holidays_set):
 
 # --- JSON Save/Load Functions ---
 
-class CustomEncoder(json.JSONEncoder):
-    """Handles encoding datetime.date objects to strings for JSON."""
-
-    def default(self, obj):
-        if isinstance(obj, datetime.date):
-            return obj.isoformat()
-        return json.JSONEncoder.default(self, obj)
-
-
 def save_budget_data(data, filename="my_budget_data.json"):
     """Saves the budget configuration data to a JSON file."""
     try:
-        # Before saving, convert dates in lists to strings to handle the JSON serialization issue
         serializable_data = data.copy()
         if 'expense_categories' in serializable_data:
             for category, items in serializable_data['expense_categories'].items():
@@ -170,7 +159,7 @@ def save_budget_data(data, filename="my_budget_data.json"):
                     transfer['dates'] = [d.isoformat() for d in transfer['dates']]
 
         with open(filename, 'w') as f:
-            json.dump(serializable_data, f, indent=4)  # Use the regular json.dump after manual conversion
+            json.dump(serializable_data, f, indent=4)
         print(f"\nBudget configuration saved to '{filename}'.")
     except Exception as e:
         print(f"Error saving budget data: {e}")
@@ -185,7 +174,6 @@ def load_budget_data(filename="my_budget_data.json"):
     try:
         with open(filename, 'r') as f:
             data = json.load(f)
-            # Convert date strings back to datetime.date objects
             if 'expense_categories' in data:
                 for category, items in data['expense_categories'].items():
                     for item in items:
@@ -366,6 +354,15 @@ def plan_budget_for_year():
             elif bill_frequency == "one-time":
                 bill_dates.append(get_date_input(f"Enter the specific date for this one-time {bill_name} payment"))
 
+            if bill_dates and bill_frequency not in ["weekly", "one-time"]:
+                adjusted_bill_dates = []
+                for b_date in bill_dates:
+                    adjusted_date = b_date
+                    while not is_business_day(adjusted_date, holidays):
+                        adjusted_date -= timedelta(days=1)
+                    adjusted_bill_dates.append(adjusted_date)
+                bill_dates = adjusted_bill_dates
+
             budget_config['expense_categories']['Bills'].append({
                 'name': bill_name,
                 'amount': bill_amount,
@@ -522,7 +519,7 @@ def plan_budget_for_year():
                         print(
                             "Warning: For recurring savings transfers without specific dates, the program will estimate.")
 
-            # --- FIX 3: Apply holiday adjustment to specific dates for savings transfers
+            # Apply holiday adjustment to specific dates
             if s_dates:
                 adjusted_s_dates = []
                 for s_date in s_dates:
@@ -582,7 +579,6 @@ def plan_budget_for_year():
                 should_apply_expense_this_week = True
             elif frequency == 'bi-weekly':
                 if item_dates:
-                    # Check for holiday adjustment and apply
                     adjusted_item_dates = []
                     for expense_date in item_dates:
                         adjusted_date = expense_date
@@ -599,18 +595,11 @@ def plan_budget_for_year():
                     if (week_start - start_of_current_week).days // 7 % 2 == 0:
                         should_apply_expense_this_week = True
             elif frequency == 'monthly':
+                # FIX for monthly bills: check if the item_dates are provided
                 if item_dates:
-                    # Check for holiday adjustment and apply
-                    adjusted_item_dates = []
                     for expense_date in item_dates:
-                        adjusted_date = expense_date
-                        while not is_business_day(adjusted_date, holidays):
-                            adjusted_date -= timedelta(days=1)
-                        adjusted_item_dates.append(adjusted_date)
-
-                    for expense_date in adjusted_item_dates:
-                        if week_start <= expense_date <= week_end and (
-                                expiry_date is None or expense_date <= expiry_date):
+                        # Check for a specific monthly date and apply it in all future months
+                        if week_start.day <= expense_date.day <= week_end.day:
                             should_apply_expense_this_week = True
                             break
                 else:
@@ -630,7 +619,6 @@ def plan_budget_for_year():
                         break
 
             if should_apply_expense_this_week:
-                # --- FIX 2: Correctly populate individual expense breakdown
                 if item_name == 'Groceries':
                     weekly_expenses_breakdown['Groceries'] += amount
                 elif item_name in [item['name'] for item in budget_config['expense_categories']['Bills']]:
@@ -644,7 +632,6 @@ def plan_budget_for_year():
 
                 weekly_total_expenses += amount
 
-        # Calculate Savings Transfers for the week
         for s_transfer in budget_config['savings_transfers']:
             s_amount = s_transfer['amount']
             s_frequency = s_transfer['frequency']
@@ -664,9 +651,11 @@ def plan_budget_for_year():
                     if (week_start - start_of_current_week).days // 7 % 2 == 0:
                         should_apply_savings_this_week = True
             elif s_frequency == 'monthly':
+                # FIX for monthly savings: check if the s_dates are provided
                 if s_dates:
                     for s_date in s_dates:
-                        if week_start <= s_date <= week_end:
+                        # Check for a specific monthly date and apply it in all future months
+                        if week_start.day <= s_date.day <= week_end.day:
                             should_apply_savings_this_week = True
                             break
                 else:
@@ -694,21 +683,17 @@ def plan_budget_for_year():
             'Weekly Free Money': weekly_free_money,
             'Saved Amount at End of Week': cumulative_saved_amount,
             'Running Balance at End of Week': running_balance,
-            **weekly_expenses_breakdown  # Add the dynamic expense breakdown
+            **weekly_expenses_breakdown
         })
 
-    # 4. Save the budget configuration
     save_budget_data(budget_config, budget_config_filename)
 
-    # 5. Output to CSV
     output_filename = "budget_plan_rest_of_year.csv"
     if financial_data:
-        # Create a dynamic list of keys for the CSV header
         all_keys = set()
         for row in financial_data:
             all_keys.update(row.keys())
 
-        # Define the desired order for the main columns
         ordered_keys_initial = [
             'Week Start Date',
             'Income Received',
@@ -719,7 +704,6 @@ def plan_budget_for_year():
             'Running Balance at End of Week'
         ]
 
-        # Add other dynamic expense keys
         other_keys = sorted([k for k in all_keys if k not in ordered_keys_initial])
         final_keys = ordered_keys_initial + other_keys
 
