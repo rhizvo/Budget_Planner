@@ -535,6 +535,84 @@ def plan_budget_for_year():
                 break
 
     # --- Financial Planning Calculations ---
+    # New logic to pre-calculate all recurring dates
+    all_expenses_to_process = []
+    for category_list in budget_config['expense_categories'].values():
+        for item in category_list:
+            if item['dates'] and item['frequency'] not in ['weekly', 'one-time']:
+                new_dates = []
+                # Assuming the first date is the starting point for recurrence
+                start_date = item['dates'][0]
+                current_date = start_date
+
+                while current_date <= end_of_year and (
+                        item['expiry_date'] is None or current_date <= item['expiry_date']):
+                    adjusted_date = current_date
+                    while not is_business_day(adjusted_date, holidays):
+                        adjusted_date -= timedelta(days=1)
+                    new_dates.append(adjusted_date)
+
+                    if item['frequency'] == 'bi-weekly':
+                        current_date += timedelta(weeks=2)
+                    elif item['frequency'] == 'monthly':
+                        # Handle month rollover for monthly dates
+                        if current_date.month == 12:
+                            current_date = datetime(current_date.year + 1, 1, current_date.day).date()
+                        else:
+                            next_month_year = current_date.year
+                            next_month = current_date.month + 1
+                            last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
+                            day_to_use = min(current_date.day, last_day_of_next_month)
+                            current_date = datetime(next_month_year, next_month, day_to_use).date()
+                    elif item['frequency'] == 'quarterly':
+                        if current_date.month + 3 <= 12:
+                            next_month_year = current_date.year
+                            next_month = current_date.month + 3
+                        else:
+                            next_month_year = current_date.year + 1
+                            next_month = (current_date.month + 3) % 12
+                            if next_month == 0: next_month = 12
+
+                        last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
+                        day_to_use = min(current_date.day, last_day_of_next_month)
+                        current_date = datetime(next_month_year, next_month, day_to_use).date()
+                    elif item['frequency'] == 'yearly':
+                        current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
+                    else:
+                        break  # Should not happen
+
+                item['dates'] = new_dates
+        all_expenses_to_process.extend(category_list)
+
+    all_savings_to_process = []
+    for transfer in budget_config['savings_transfers']:
+        if transfer['dates'] and transfer['frequency'] not in ['weekly', 'one-time']:
+            new_dates = []
+            start_date = transfer['dates'][0]
+            current_date = start_date
+
+            while current_date <= end_of_year:
+                adjusted_date = current_date
+                while not is_business_day(adjusted_date, holidays):
+                    adjusted_date -= timedelta(days=1)
+                new_dates.append(adjusted_date)
+
+                if transfer['frequency'] == 'bi-weekly':
+                    current_date += timedelta(weeks=2)
+                elif transfer['frequency'] == 'monthly':
+                    if current_date.month == 12:
+                        current_date = datetime(current_date.year + 1, 1, current_date.day).date()
+                    else:
+                        next_month_year = current_date.year
+                        next_month = current_date.month + 1
+                        last_day_of_next_month = calendar.monthrange(next_month_year, next_month)[1]
+                        day_to_use = min(current_date.day, last_day_of_next_month)
+                        current_date = datetime(next_month_year, next_month, day_to_use).date()
+                else:
+                    break
+
+            transfer['dates'] = new_dates
+        all_savings_to_process.append(transfer)
 
     start_of_current_week = today - timedelta(days=today.weekday())
 
@@ -557,12 +635,8 @@ def plan_budget_for_year():
         weekly_savings_transfer = 0.0
 
         for pay_date in income_pay_dates:
-            if week_start <= pay_date <= week_end:
+            if start_of_current_week <= pay_date <= week_end:
                 weekly_income += budget_config['income_amount']
-
-        all_expenses_to_process = []
-        for category_list in budget_config['expense_categories'].values():
-            all_expenses_to_process.extend(category_list)
 
         for item in all_expenses_to_process:
             amount = item['amount']
@@ -574,65 +648,48 @@ def plan_budget_for_year():
             should_apply_expense_this_week = False
 
             if expiry_date is not None and week_start > expiry_date:
-                should_apply_expense_this_week = False
-            elif frequency == 'weekly':
-                should_apply_expense_this_week = True
-            elif frequency == 'bi-weekly':
-                if item_dates:
-                    adjusted_item_dates = []
-                    for expense_date in item_dates:
-                        adjusted_date = expense_date
-                        while not is_business_day(adjusted_date, holidays):
-                            adjusted_date -= timedelta(days=1)
-                        adjusted_item_dates.append(adjusted_date)
+                continue
 
-                    for expense_date in adjusted_item_dates:
-                        if week_start <= expense_date <= week_end and (
-                                expiry_date is None or expense_date <= expiry_date):
+            if frequency == 'weekly':
+                should_apply_expense_this_week = True
+            elif frequency in ['bi-weekly', 'monthly', 'quarterly', 'yearly', 'one-time']:
+                if item_dates:
+                    for expense_date in item_dates:
+                        if week_start <= expense_date <= week_end:
                             should_apply_expense_this_week = True
                             break
-                else:
+                elif frequency == 'bi-weekly':
                     if (week_start - start_of_current_week).days // 7 % 2 == 0:
                         should_apply_expense_this_week = True
-            elif frequency == 'monthly':
-                # FIX for monthly bills: check if the item_dates are provided
-                if item_dates:
-                    for expense_date in item_dates:
-                        # Check for a specific monthly date and apply it in all future months
-                        if week_start.day <= expense_date.day <= week_end.day:
-                            should_apply_expense_this_week = True
-                            break
-                else:
+                elif frequency == 'monthly':
                     if week_start.month != (week_start - timedelta(days=7)).month or week_start.day <= 7:
                         should_apply_expense_this_week = True
-            elif frequency == 'quarterly' or frequency == 'yearly':
-                if item_dates:
-                    for expense_date in item_dates:
-                        if week_start <= expense_date <= week_end and (
-                                expiry_date is None or expense_date <= expiry_date):
-                            should_apply_expense_this_week = True
-                            break
-            elif frequency == 'one-time':
-                for expense_date in item_dates:
-                    if week_start <= expense_date <= week_end:
+                elif frequency == 'quarterly':
+                    # Simplified check for quarterly, assumes first quarter is Jan-Mar
+                    if week_start.month in [1, 4, 7, 10] and (week_start.day <= 7 or week_start.day >= 25):
                         should_apply_expense_this_week = True
-                        break
+                elif frequency == 'yearly':
+                    if week_start.month == 1 and week_start.day <= 7:
+                        should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
-                if item_name == 'Groceries':
-                    weekly_expenses_breakdown['Groceries'] += amount
-                elif item_name in [item['name'] for item in budget_config['expense_categories']['Bills']]:
-                    weekly_expenses_breakdown[f"Bill: {item_name}"] += amount
-                elif item_name in [item['name'] for item in budget_config['expense_categories']['Streaming Services']]:
-                    weekly_expenses_breakdown[f"Streaming: {item_name}"] += amount
-                elif item_name in [item['name'] for item in budget_config['expense_categories']['Misc Monthly']]:
-                    weekly_expenses_breakdown[f"Misc Monthly: {item_name}"] += amount
-                elif item_name in [item['name'] for item in budget_config['expense_categories']['One-Time']]:
-                    weekly_expenses_breakdown[f"One-Time: {item_name}"] += amount
+                category = 'One-Time' if frequency == 'one-time' else next(
+                    (cat for cat, items in budget_config['expense_categories'].items() if item in items),
+                    'Misc Monthly')
+                key_name = item_name
+                if category == 'Bills':
+                    key_name = f"Bill: {item_name}"
+                elif category == 'Streaming Services':
+                    key_name = f"Streaming: {item_name}"
+                elif category == 'Misc Monthly':
+                    key_name = f"Misc Monthly: {item_name}"
+                elif category == 'One-Time':
+                    key_name = f"One-Time: {item_name}"
 
+                weekly_expenses_breakdown[key_name] += amount
                 weekly_total_expenses += amount
 
-        for s_transfer in budget_config['savings_transfers']:
+        for s_transfer in all_savings_to_process:
             s_amount = s_transfer['amount']
             s_frequency = s_transfer['frequency']
             s_dates = s_transfer['dates']
@@ -641,31 +698,18 @@ def plan_budget_for_year():
 
             if s_frequency == 'weekly':
                 should_apply_savings_this_week = True
-            elif s_frequency == 'bi-weekly':
+            elif s_frequency in ['bi-weekly', 'monthly', 'one-time']:
                 if s_dates:
                     for s_date in s_dates:
                         if week_start <= s_date <= week_end:
                             should_apply_savings_this_week = True
                             break
-                else:
+                elif s_frequency == 'bi-weekly':
                     if (week_start - start_of_current_week).days // 7 % 2 == 0:
                         should_apply_savings_this_week = True
-            elif s_frequency == 'monthly':
-                # FIX for monthly savings: check if the s_dates are provided
-                if s_dates:
-                    for s_date in s_dates:
-                        # Check for a specific monthly date and apply it in all future months
-                        if week_start.day <= s_date.day <= week_end.day:
-                            should_apply_savings_this_week = True
-                            break
-                else:
+                elif s_frequency == 'monthly':
                     if week_start.month != (week_start - timedelta(days=7)).month or week_start.day <= 7:
                         should_apply_savings_this_week = True
-            elif s_frequency == 'one-time':
-                for s_date in s_dates:
-                    if week_start <= s_date <= week_end:
-                        should_apply_savings_this_week = True
-                        break
 
             if should_apply_savings_this_week:
                 weekly_savings_transfer += s_amount
@@ -685,6 +729,16 @@ def plan_budget_for_year():
             'Running Balance at End of Week': running_balance,
             **weekly_expenses_breakdown
         })
+
+    # Reset expenses and savings to original state before saving
+    budget_config['expense_categories'] = {
+        'Groceries': [item for item in all_expenses_to_process if item['name'] == 'Groceries'],
+        'Bills': [item for item in all_expenses_to_process if 'Bill' in item['name']],
+        'Streaming Services': [item for item in all_expenses_to_process if 'Streaming' in item['name']],
+        'Misc Monthly': [item for item in all_expenses_to_process if 'Misc Monthly' in item['name']],
+        'One-Time': [item for item in all_expenses_to_process if 'One-Time' in item['name']]
+    }
+    budget_config['savings_transfers'] = all_savings_to_process
 
     save_budget_data(budget_config, budget_config_filename)
 
