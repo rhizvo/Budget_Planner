@@ -255,6 +255,8 @@ def plan_budget_for_year():
     budget_config_filename = "my_budget_data.json"
 
     budget_config = {
+        'initial_debit_balance': 0.0,
+        'initial_savings_balance': 0.0,
         'income': {
             'amount': 0.0,
             'frequency': 'bi-weekly',
@@ -282,6 +284,17 @@ def plan_budget_for_year():
             print("Starting a new budget.")
     else:
         print("No existing budget file found. Starting a new budget.")
+
+    print("\n--- Initial Balances ---")
+    if budget_config['initial_debit_balance'] > 0 or budget_config['initial_savings_balance'] > 0:
+        print(f"Current initial debit balance: ${budget_config['initial_debit_balance']:.2f}")
+        print(f"Current initial savings balance: ${budget_config['initial_savings_balance']:.2f}")
+        if get_yes_no_input("Do you want to update your initial balances?"):
+            budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
+            budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
+    else:
+        budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
+        budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
 
     print("\n--- Holiday Information ---")
     if budget_config['holiday_filepath'] and os.path.exists(budget_config['holiday_filepath']):
@@ -628,8 +641,8 @@ def plan_budget_for_year():
         current_week_start += timedelta(weeks=1)
 
     financial_data = []
-    cumulative_saved_amount = 0.0
-    running_balance = 0.0
+    cumulative_saved_amount = budget_config['initial_savings_balance']
+    running_balance = budget_config['initial_debit_balance']
 
     for week_start in weeks:
         week_end = week_start + timedelta(days=6)
@@ -720,17 +733,14 @@ def plan_budget_for_year():
             if should_apply_savings_this_week:
                 weekly_savings_transfer += s_amount
 
-        running_balance += weekly_income - weekly_total_expenses
+        running_balance += weekly_income - weekly_total_expenses - weekly_savings_transfer
         cumulative_saved_amount += weekly_savings_transfer
-
-        weekly_free_money = weekly_income - weekly_total_expenses - weekly_savings_transfer
 
         financial_data.append({
             'Week Start Date': week_start.strftime("%Y-%m-%d"),
             'Income Received': weekly_income,
             'Total Weekly Expenses': weekly_total_expenses,
             'Savings Transferred': weekly_savings_transfer,
-            'Weekly Free Money': weekly_free_money,
             'Saved Amount at End of Week': cumulative_saved_amount,
             'Running Balance at End of Week': running_balance,
             **weekly_expenses_breakdown
@@ -741,8 +751,8 @@ def plan_budget_for_year():
         'Groceries': [item for item in all_expenses_to_process if item['name'] == 'Groceries'],
         'Bills': [item for item in all_expenses_to_process if
                   item['name'] not in [s['name'] for s in budget_config['expense_categories']['Streaming Services']] and
-                  item['name'] not in [m['name'] for m in budget_config['expense_categories']['Misc Monthly']] and item[
-                      'name'] not in [o['name'] for o in budget_config['expense_categories']['One-Time']] and item[
+                  item['name'] not in [m['name'] for m in budget_config['expense_categories']['Misc Monthly']] and
+                  item['name'] not in [o['name'] for o in budget_config['expense_categories']['One-Time']] and item[
                       'name'] != 'Groceries'],
         'Streaming Services': [item for item in all_expenses_to_process if 'Streaming' in item['name']],
         'Misc Monthly': [item for item in all_expenses_to_process if 'Misc Monthly' in item['name']],
@@ -763,7 +773,6 @@ def plan_budget_for_year():
             'Income Received',
             'Total Weekly Expenses',
             'Savings Transferred',
-            'Weekly Free Money',
             'Saved Amount at End of Week',
             'Running Balance at End of Week'
         ]
