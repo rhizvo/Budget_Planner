@@ -368,14 +368,16 @@ def plan_budget_for_year():
     print("\n--- Manage Your Bills ---")
     current_bills = budget_config['expense_categories']['Bills']
     if current_bills:
-        print("Existing Bills:")
-        for i, bill in enumerate(current_bills):
-            expiry_info = f", Expires: {bill['expiry_date'].strftime('%Y-%m-%d')}" if bill[
-                'expiry_date'] else ", No expiry"
-            print(f"  {i + 1}. {bill['name']}: ${bill['amount']:.2f} ({bill['frequency']}{expiry_info})")
-
+        # Initial check to see if there are bills to modify
         if get_yes_no_input("Do you want to modify or remove an existing bill?"):
             while True:
+                # Display the list of existing bills at the beginning of the loop
+                print("Existing Bills:")
+                for i, bill in enumerate(current_bills):
+                    expiry_info = f", Expires: {bill['expiry_date'].strftime('%Y-%m-%d')}" if bill[
+                        'expiry_date'] else ", No expiry"
+                    print(f"  {i + 1}. {bill['name']}: ${bill['amount']:.2f} ({bill['frequency']}{expiry_info})")
+
                 try:
                     choice = input("Enter the number of the bill to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -386,7 +388,10 @@ def plan_budget_for_year():
                         if get_yes_no_input("Do you want to remove this bill?"):
                             current_bills.pop(idx)
                             print(f"{selected_bill['name']} removed.")
-                            break
+                            if not current_bills:
+                                print("No more bills left to modify.")
+                                break
+                            continue  # Continue the loop to show the updated list
 
                         selected_bill['name'] = input(
                             f"Enter new name for {selected_bill['name']} (or press Enter to keep '{selected_bill['name']}'): ") or \
