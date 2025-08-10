@@ -702,18 +702,24 @@ def plan_budget_for_year():
                         should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
-                category = 'One-Time' if frequency == 'one-time' else next(
-                    (cat for cat, items in budget_config['expense_categories'].items() if item in items),
-                    'Misc Monthly')
-                key_name = item_name
-                if category == 'Bills':
+                # Determine the correct key for the CSV header
+                if 'Groceries' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
+                    'Groceries']:
+                    key_name = item_name
+                elif 'Bills' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
+                    'Bills']:
                     key_name = f"Bill: {item_name}"
-                elif category == 'Streaming Services':
+                elif 'Streaming Services' in budget_config['expense_categories'] and item in \
+                        budget_config['expense_categories']['Streaming Services']:
                     key_name = f"Streaming: {item_name}"
-                elif category == 'Misc Monthly':
+                elif 'Misc Monthly' in budget_config['expense_categories'] and item in \
+                        budget_config['expense_categories']['Misc Monthly']:
                     key_name = f"Misc Monthly: {item_name}"
-                elif category == 'One-Time':
+                elif 'One-Time' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
+                    'One-Time']:
                     key_name = f"One-Time: {item_name}"
+                else:
+                    key_name = item_name
 
                 weekly_expenses_breakdown[key_name] += amount
                 weekly_total_expenses += amount
@@ -758,19 +764,8 @@ def plan_budget_for_year():
             **weekly_expenses_breakdown
         })
 
-    # Reset expenses and savings to original state before saving
-    budget_config['expense_categories'] = {
-        'Groceries': [item for item in all_expenses_to_process if item['name'] == 'Groceries'],
-        'Bills': [item for item in all_expenses_to_process if
-                  item['name'] not in [s['name'] for s in budget_config['expense_categories']['Streaming Services']] and
-                  item['name'] not in [m['name'] for m in budget_config['expense_categories']['Misc Monthly']] and
-                  item['name'] not in [o['name'] for o in budget_config['expense_categories']['One-Time']] and item[
-                      'name'] != 'Groceries'],
-        'Streaming Services': [item for item in all_expenses_to_process if 'Streaming' in item['name']],
-        'Misc Monthly': [item for item in all_expenses_to_process if 'Misc Monthly' in item['name']],
-        'One-Time': [item for item in all_expenses_to_process if 'One-Time' in item['name']]
-    }
-    budget_config['savings_transfers'] = all_savings_to_process
+    # The issue was here. The code incorrectly tried to rebuild the budget_config from the all_expenses_to_process and all_savings_to_process.
+    # By removing this block, we ensure that the budget_config is saved exactly as the user has configured it.
 
     save_budget_data(budget_config, budget_config_filename)
 
