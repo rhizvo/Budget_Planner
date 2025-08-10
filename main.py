@@ -764,8 +764,35 @@ def plan_budget_for_year():
             **weekly_expenses_breakdown
         })
 
-    # The issue was here. The code incorrectly tried to rebuild the budget_config from the all_expenses_to_process and all_savings_to_process.
-    # By removing this block, we ensure that the budget_config is saved exactly as the user has configured it.
+    # Corrected the logic for re-building the budget_config dictionary to ensure existing items are not lost.
+    # The previous fix was incomplete. This version correctly preserves all items.
+
+    new_expense_categories = {
+        'Groceries': [],
+        'Bills': [],
+        'Streaming Services': [],
+        'Misc Monthly': [],
+        'One-Time': []
+    }
+
+    for item in all_expenses_to_process:
+        if item['frequency'] == 'weekly' and item['name'] == 'Groceries':
+            new_expense_categories['Groceries'].append(item)
+        elif item['frequency'] == 'one-time':
+            new_expense_categories['One-Time'].append(item)
+        elif item['frequency'] == 'monthly':
+            # This is where the old logic failed. We need to check if the item belongs to streaming or misc.
+            is_streaming = any(s['name'].lower() == item['name'].lower() for s in
+                               budget_config['expense_categories']['Streaming Services'])
+            if is_streaming:
+                new_expense_categories['Streaming Services'].append(item)
+            else:
+                new_expense_categories['Misc Monthly'].append(item)
+        else:
+            new_expense_categories['Bills'].append(item)
+
+    budget_config['expense_categories'] = new_expense_categories
+    budget_config['savings_transfers'] = all_savings_to_process
 
     save_budget_data(budget_config, budget_config_filename)
 
