@@ -182,6 +182,8 @@ def load_budget_data(filename="my_budget_data.json"):
             if 'expense_categories' in data:
                 for category, items in data['expense_categories'].items():
                     for item in items:
+                        # Ensure each item has a category field when loaded
+                        item.setdefault('category', category)
                         if 'dates' in item and item['dates']:
                             item['dates'] = [datetime.fromisoformat(d).date() for d in item['dates']]
                         if 'expiry_date' in item and item['expiry_date']:
@@ -360,7 +362,8 @@ def plan_budget_for_year():
     elif get_yes_no_input("Do you have a regular grocery expense?"):
         groceries_amount = get_float_input("Enter your typical weekly grocery expense")
         budget_config['expense_categories']['Groceries'].append(
-            {'name': 'Groceries', 'amount': groceries_amount, 'frequency': 'weekly', 'dates': [], 'expiry_date': None})
+            {'name': 'Groceries', 'amount': groceries_amount, 'frequency': 'weekly', 'dates': [], 'expiry_date': None,
+             'category': 'Groceries'})
 
     print("\n--- Manage Your Bills ---")
     current_bills = budget_config['expense_categories']['Bills']
@@ -450,12 +453,13 @@ def plan_budget_for_year():
                     adjusted_bill_dates.append(adjusted_date)
                 bill_dates = adjusted_bill_dates
 
-            budget_config['expense_categories']['Bills'].append({
+            current_bills.append({
                 'name': bill_name,
                 'amount': bill_amount,
                 'frequency': bill_frequency,
                 'dates': bill_dates,
-                'expiry_date': bill_expiry_date
+                'expiry_date': bill_expiry_date,
+                'category': 'Bills'  # New: Add a category field
             })
             if not get_yes_no_input("Add another bill?"):
                 break
@@ -489,7 +493,7 @@ def plan_budget_for_year():
                     service_expiry_date = get_date_input(f"Enter the expiry date for {service_name}")
                 current_streaming.append(
                     {'name': service_name, 'amount': service_amount, 'frequency': 'monthly', 'dates': [],
-                     'expiry_date': service_expiry_date})
+                     'expiry_date': service_expiry_date, 'category': 'Streaming Services'})  # New: Add a category field
             if not get_yes_no_input("Add/Update another streaming service?"):
                 break
 
@@ -527,7 +531,7 @@ def plan_budget_for_year():
                     misc_dates = get_multiple_dates(f"Enter a specific pay date for {misc_name}")
                 current_misc.append(
                     {'name': misc_name, 'amount': misc_amount, 'frequency': 'monthly', 'dates': misc_dates,
-                     'expiry_date': misc_expiry_date})
+                     'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})  # New: Add a category field
             if not get_yes_no_input("Add/Update another miscellaneous monthly expense?"):
                 break
 
@@ -552,7 +556,8 @@ def plan_budget_for_year():
                 one_time_amount = get_float_input(f"Enter the amount for {one_time_name}")
                 one_time_date = get_date_input(f"Enter the date for {one_time_name}")
                 current_one_time.append({'name': one_time_name, 'amount': one_time_amount, 'frequency': 'one-time',
-                                         'dates': [one_time_date], 'expiry_date': None})
+                                         'dates': [one_time_date], 'expiry_date': None,
+                                         'category': 'One-Time'})  # New: Add a category field
             if not get_yes_no_input("Add/Update another one-time expense?"):
                 break
 
@@ -616,14 +621,12 @@ def plan_budget_for_year():
                     adjusted_s_dates.append(adjusted_date)
                 s_dates = adjusted_s_dates
 
-            budget_config['savings_transfers'].append(
+            current_savings_transfers.append(
                 {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates})
             if not get_yes_no_input("Add another savings transfer?"):
                 break
 
     # New logic to pre-calculate all recurring dates
-    # --- Financial Planning Calculations ---
-
     all_expenses_to_process = []
     for category_list in budget_config['expense_categories'].values():
         for item in category_list:
@@ -673,6 +676,7 @@ def plan_budget_for_year():
             item_dates = item['dates']
             item_name = item['name']
             expiry_date = item.get('expiry_date')
+            category = item.get('category')
 
             should_apply_expense_this_week = False
 
@@ -702,21 +706,14 @@ def plan_budget_for_year():
                         should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
-                # Determine the correct key for the CSV header
-                if 'Groceries' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
-                    'Groceries']:
-                    key_name = item_name
-                elif 'Bills' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
-                    'Bills']:
+                # Determine the correct key for the CSV header based on the category
+                if category == 'Bills':
                     key_name = f"Bill: {item_name}"
-                elif 'Streaming Services' in budget_config['expense_categories'] and item in \
-                        budget_config['expense_categories']['Streaming Services']:
+                elif category == 'Streaming Services':
                     key_name = f"Streaming: {item_name}"
-                elif 'Misc Monthly' in budget_config['expense_categories'] and item in \
-                        budget_config['expense_categories']['Misc Monthly']:
+                elif category == 'Misc Monthly':
                     key_name = f"Misc Monthly: {item_name}"
-                elif 'One-Time' in budget_config['expense_categories'] and item in budget_config['expense_categories'][
-                    'One-Time']:
+                elif category == 'One-Time':
                     key_name = f"One-Time: {item_name}"
                 else:
                     key_name = item_name
@@ -764,9 +761,8 @@ def plan_budget_for_year():
             **weekly_expenses_breakdown
         })
 
-    # Corrected the logic for re-building the budget_config dictionary to ensure existing items are not lost.
-    # The previous fix was incomplete. This version correctly preserves all items.
-
+    # The issue was here. The code incorrectly tried to rebuild the budget_config from the all_expenses_to_process and all_savings_to_process.
+    # This block now correctly uses the new 'category' field to rebuild the data.
     new_expense_categories = {
         'Groceries': [],
         'Bills': [],
@@ -776,20 +772,9 @@ def plan_budget_for_year():
     }
 
     for item in all_expenses_to_process:
-        if item['frequency'] == 'weekly' and item['name'] == 'Groceries':
-            new_expense_categories['Groceries'].append(item)
-        elif item['frequency'] == 'one-time':
-            new_expense_categories['One-Time'].append(item)
-        elif item['frequency'] == 'monthly':
-            # This is where the old logic failed. We need to check if the item belongs to streaming or misc.
-            is_streaming = any(s['name'].lower() == item['name'].lower() for s in
-                               budget_config['expense_categories']['Streaming Services'])
-            if is_streaming:
-                new_expense_categories['Streaming Services'].append(item)
-            else:
-                new_expense_categories['Misc Monthly'].append(item)
-        else:
-            new_expense_categories['Bills'].append(item)
+        category = item.get('category')
+        if category in new_expense_categories:
+            new_expense_categories[category].append(item)
 
     budget_config['expense_categories'] = new_expense_categories
     budget_config['savings_transfers'] = all_savings_to_process
