@@ -655,6 +655,7 @@ def plan_budget_for_year():
 
     for week_start in weeks:
         week_end = week_start + timedelta(days=6)
+        week_of_year = week_start.isocalendar()[1]
 
         weekly_income = 0.0
         weekly_expenses_breakdown = defaultdict(float)
@@ -746,7 +747,9 @@ def plan_budget_for_year():
         cumulative_saved_amount += weekly_savings_transfer
 
         financial_data.append({
+            'Week of Year': week_of_year,
             'Week Start Date': week_start.strftime("%Y-%m-%d"),
+            'Week End Date': week_end.strftime("%Y-%m-%d"),
             'Income Received': weekly_income,
             'Total Weekly Expenses': weekly_total_expenses,
             'Savings Transferred': weekly_savings_transfer,
@@ -778,7 +781,9 @@ def plan_budget_for_year():
             all_keys.update(row.keys())
 
         ordered_keys_initial = [
+            'Week of Year',
             'Week Start Date',
+            'Week End Date',
             'Income Received',
             'Total Weekly Expenses',
             'Savings Transferred',
