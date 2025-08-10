@@ -226,15 +226,24 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, init
         elif frequency == 'bi-weekly':
             current_date += timedelta(weeks=2)
         elif frequency == 'monthly':
-            # Handle month rollover for monthly dates
-            try:
-                current_date = datetime(current_date.year, current_date.month + 1, current_date.day).date()
-            except ValueError:
-                # If day is too large for the next month (e.g., Jan 31 -> Feb 28/29)
-                current_date = datetime(current_date.year, current_date.month + 2, 1).date() - timedelta(days=1)
-
+            # Corrected logic for monthly rollover
+            new_month = current_date.month + 1
+            new_year = current_date.year
+            if new_month > 12:
+                new_month = 1
+                new_year += 1
+            # Adjust day if the new month doesn't have enough days
+            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            current_date = datetime(new_year, new_month, day).date()
         elif frequency == 'quarterly':
-            current_date = datetime(current_date.year, current_date.month + 3, current_date.day).date()
+            # Corrected logic for quarterly rollover
+            new_month = current_date.month + 3
+            new_year = current_date.year
+            if new_month > 12:
+                new_month -= 12
+                new_year += 1
+            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            current_date = datetime(new_year, new_month, day).date()
         elif frequency == 'yearly':
             current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
         else:
