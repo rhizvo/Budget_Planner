@@ -569,11 +569,14 @@ def plan_budget_for_year():
     print("\n--- Manage Savings Transfers ---")
     current_savings_transfers = budget_config['savings_transfers']
     if current_savings_transfers:
-        print("Existing Savings Transfers:")
-        for i, transfer in enumerate(current_savings_transfers):
-            print(f"  {i + 1}. ${transfer['amount']:.2f} ({transfer['frequency']})")
+        # Initial check to see if there are transfers to modify
         if get_yes_no_input("Do you want to modify or remove an existing savings transfer?"):
             while True:
+                # Display the list of existing transfers at the beginning of the loop
+                print("Existing Savings Transfers:")
+                for i, transfer in enumerate(current_savings_transfers):
+                    print(f"  {i + 1}. ${transfer['amount']:.2f} ({transfer['frequency']})")
+
                 try:
                     choice = input("Enter the number of the transfer to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -583,7 +586,10 @@ def plan_budget_for_year():
                         if get_yes_no_input("Do you want to remove this savings transfer?"):
                             current_savings_transfers.pop(idx)
                             print("Savings transfer removed.")
-                            break
+                            if not current_savings_transfers:
+                                print("No more savings transfers left to modify.")
+                                break
+                            continue  # Continue the loop to show the updated list
 
                         selected_transfer['amount'] = get_float_input(
                             f"Enter new amount for transfer (current: ${selected_transfer['amount']:.2f})")
