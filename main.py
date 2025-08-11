@@ -22,11 +22,14 @@ def get_float_input(prompt):
     """Helper function to get a valid float input."""
     while True:
         try:
-            value = float(input(prompt + ": "))
-            if value < 0:
+            value = input(prompt + ": ")
+            if value == '':
+                return None  # Return None for empty input
+            float_value = float(value)
+            if float_value < 0:
                 print("Please enter a non-negative number.")
                 continue
-            return value
+            return float_value
         except ValueError:
             print("Invalid input. Please enter a number.")
 
@@ -35,6 +38,8 @@ def get_frequency_input(prompt):
     """Helper function to get a valid frequency input."""
     while True:
         freq = input(prompt + " (weekly, bi-weekly, monthly, quarterly, yearly, one-time): ").lower()
+        if freq == '':
+            return None  # Return None for empty input
         if freq in ["weekly", "bi-weekly", "monthly", "quarterly", "yearly", "one-time"]:
             return freq
         else:
@@ -263,13 +268,16 @@ def manage_groceries(budget_config):
         current_groceries = budget_config['expense_categories']['Groceries'][0]['amount']
         print(f"Current typical weekly grocery expense: ${current_groceries:.2f}")
         if get_yes_no_input("Do you want to update your weekly grocery expense?"):
-            budget_config['expense_categories']['Groceries'][0]['amount'] = get_float_input(
-                "Enter your new typical weekly grocery expense")
+            new_amount = get_float_input("Enter your new typical weekly grocery expense")
+            if new_amount is not None:
+                budget_config['expense_categories']['Groceries'][0]['amount'] = new_amount
     elif get_yes_no_input("Do you have a regular grocery expense?"):
         groceries_amount = get_float_input("Enter your typical weekly grocery expense")
-        budget_config['expense_categories']['Groceries'].append(
-            {'name': 'Groceries', 'amount': groceries_amount, 'frequency': 'weekly', 'dates': [], 'expiry_date': None,
-             'category': 'Groceries'})
+        if groceries_amount is not None:
+            budget_config['expense_categories']['Groceries'].append(
+                {'name': 'Groceries', 'amount': groceries_amount, 'frequency': 'weekly', 'dates': [],
+                 'expiry_date': None,
+                 'category': 'Groceries'})
 
 
 def manage_bills(budget_config, holidays):
@@ -299,28 +307,32 @@ def manage_bills(budget_config, holidays):
                                 break
                             continue
 
-                        selected_bill['name'] = input(
-                            f"Enter new name for {selected_bill['name']} (or press Enter to keep '{selected_bill['name']}'): ") or \
-                                                selected_bill['name']
-                        selected_bill['amount'] = get_float_input(
-                            f"Enter new amount for {selected_bill['name']} (current: ${selected_bill['amount']:.2f})") or \
-                                                  selected_bill['amount']
+                        new_name = input(
+                            f"Enter new name for {selected_bill['name']} (or press Enter to keep '{selected_bill['name']}'): ")
+                        if new_name:
+                            selected_bill['name'] = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new amount for {selected_bill['name']} (or press Enter to keep '${selected_bill['amount']:.2f}'): ")
+                        if new_amount is not None:
+                            selected_bill['amount'] = new_amount
 
                         new_freq = get_frequency_input(
-                            f"Enter new frequency for {selected_bill['name']} (current: {selected_bill['frequency']})")
-                        selected_bill['frequency'] = new_freq
+                            f"Enter new frequency for {selected_bill['name']} (or press Enter to keep '{selected_bill['frequency']}'): ")
+                        if new_freq is not None:
+                            selected_bill['frequency'] = new_freq
 
-                        if new_freq not in ["weekly"] and get_yes_no_input(
+                        if selected_bill['frequency'] not in ["weekly"] and get_yes_no_input(
                                 f"Do you want to update specific payment dates for {selected_bill['name']}? (current dates: {[d.strftime('%Y-%m-%d') for d in selected_bill['dates']]})"):
                             selected_bill['dates'] = get_multiple_dates(
                                 f"Enter new specific payment dates for {selected_bill['name']}")
-                            if not selected_bill['dates'] and new_freq != "one-time":
+                            if not selected_bill['dates'] and selected_bill['frequency'] != "one-time":
                                 print(
                                     "Warning: For recurring expenses without specific dates, the program will estimate. For accuracy, provide specific dates if known.")
-                        elif new_freq == "one-time" and not selected_bill['dates']:
+                        elif selected_bill['frequency'] == "one-time" and not selected_bill['dates']:
                             selected_bill['dates'].append(get_date_input(
                                 f"Enter the specific date for this one-time {selected_bill['name']} payment"))
-                        elif new_freq == "weekly":
+                        elif selected_bill['frequency'] == "weekly":
                             selected_bill['dates'] = []
 
                         if get_yes_no_input(
@@ -400,12 +412,17 @@ def manage_streaming(budget_config):
                                 print("No more streaming services left to modify.")
                                 break
                             continue
-                        selected_service['name'] = input(
-                            f"Enter new name for {selected_service['name']} (or press Enter to keep '{selected_service['name']}'): ") or \
-                                                   selected_service['name']
-                        selected_service['amount'] = get_float_input(
-                            f"Enter new monthly amount for {selected_service['name']} (current: ${selected_service['amount']:.2f})") or \
-                                                     selected_service['amount']
+
+                        new_name = input(
+                            f"Enter new name for {selected_service['name']} (or press Enter to keep '{selected_service['name']}'): ")
+                        if new_name:
+                            selected_service['name'] = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new monthly amount for {selected_service['name']} (or press Enter to keep '${selected_service['amount']:.2f}'): ")
+                        if new_amount is not None:
+                            selected_service['amount'] = new_amount
+
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_service['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_service['expiry_date'] = get_date_input(
@@ -457,27 +474,35 @@ def manage_misc_monthly(budget_config):
                                 print("No more miscellaneous monthly expenses left to modify.")
                                 break
                             continue
-                        selected_misc['name'] = input(
-                            f"Enter new name for {selected_misc['name']} (or press Enter to keep '{selected_misc['name']}'): ") or \
-                                                selected_misc['name']
-                        selected_misc['amount'] = get_float_input(
-                            f"Enter new monthly amount for {selected_misc['name']} (current: ${selected_misc['amount']:.2f})") or \
-                                                  selected_misc['amount']
+
+                        new_name = input(
+                            f"Enter new name for {selected_misc['name']} (or press Enter to keep '{selected_misc['name']}'): ")
+                        if new_name:
+                            selected_misc['name'] = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new monthly amount for {selected_misc['name']} (or press Enter to keep '${selected_misc['amount']:.2f}'): ")
+                        if new_amount is not None:
+                            selected_misc['amount'] = new_amount
+
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_misc['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_misc['expiry_date'] = get_date_input(
                                     f"Enter the new expiry date for {selected_misc['name']}")
                             else:
                                 selected_misc['expiry_date'] = None
+
                         if get_yes_no_input(
                                 f"Do you want to update specific payment dates for {selected_misc['name']}?"):
                             selected_misc['dates'] = get_multiple_dates(
                                 f"Enter new specific payment dates for {selected_misc['name']}")
+
                         print(f"{selected_misc['name']} updated.")
                     else:
                         print("Invalid expense number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
+
     if get_yes_no_input("Do you want to add a new miscellaneous monthly expense?"):
         while True:
             misc_name = input("Enter the name of the miscellaneous expense or 'done' to finish: ").lower()
@@ -519,18 +544,31 @@ def manage_one_time(budget_config):
                                 print("No more one-time expenses left to modify.")
                                 break
                             continue
-                        selected_one_time['name'] = input(
-                            f"Enter new name for {selected_one_time['name']} (or press Enter to keep '{selected_one_time['name']}'): ") or \
-                                                    selected_one_time['name']
-                        selected_one_time['amount'] = get_float_input(
-                            f"Enter new amount for {selected_one_time['name']} (current: ${selected_one_time['amount']:.2f})")
-                        selected_one_time['dates'] = [get_date_input(
-                            f"Enter the new date for {selected_one_time['name']} (current: {selected_one_time['dates'][0].strftime('%Y-%m-%d')})")]
+
+                        new_name = input(
+                            f"Enter new name for {selected_one_time['name']} (or press Enter to keep '{selected_one_time['name']}'): ")
+                        if new_name:
+                            selected_one_time['name'] = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new amount for {selected_one_time['name']} (or press Enter to keep '${selected_one_time['amount']:.2f}'): ")
+                        if new_amount is not None:
+                            selected_one_time['amount'] = new_amount
+
+                        new_date_str = input(
+                            f"Enter the new date for {selected_one_time['name']} (or press Enter to keep '{selected_one_time['dates'][0].strftime('%Y-%m-%d')}'): ")
+                        if new_date_str:
+                            try:
+                                selected_one_time['dates'][0] = datetime.strptime(new_date_str, "%Y-%m-%d").date()
+                            except ValueError:
+                                print("Invalid date format. Keeping original date.")
+
                         print(f"{selected_one_time['name']} updated.")
                     else:
                         print("Invalid expense number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
+
     if get_yes_no_input("Do you want to add a new one-time expense?"):
         while True:
             one_time_name = input("Enter the name of the one-time expense or 'done' to finish: ").lower()
@@ -566,10 +604,17 @@ def manage_savings(budget_config, holidays):
                                 print("No more savings transfers left to modify.")
                                 break
                             continue
-                        selected_transfer['amount'] = get_float_input(
-                            f"Enter new amount for transfer (current: ${selected_transfer['amount']:.2f})")
-                        selected_transfer['frequency'] = get_frequency_input(
-                            f"Enter new frequency for transfer (current: {selected_transfer['frequency']})")
+
+                        new_amount = get_float_input(
+                            f"Enter new amount for transfer (or press Enter to keep '${selected_transfer['amount']:.2f}'): ")
+                        if new_amount is not None:
+                            selected_transfer['amount'] = new_amount
+
+                        new_freq = get_frequency_input(
+                            f"Enter new frequency for transfer (or press Enter to keep '{selected_transfer['frequency']}'): ")
+                        if new_freq is not None:
+                            selected_transfer['frequency'] = new_freq
+
                         if selected_transfer['frequency'] != "weekly":
                             if get_yes_no_input(
                                     f"Do you want to update specific dates for this transfer? (current: {[d.strftime('%Y-%m-%d') for d in selected_transfer['dates']]})"):
@@ -617,9 +662,18 @@ def manage_income(budget_config, end_of_year, holidays):
     if current_income_amount > 0:
         print(f"Current income: ${current_income_amount:.2f} ({current_income_freq})")
         if get_yes_no_input("Do you want to update your income information?"):
-            budget_config['income']['amount'] = get_float_input("Enter your new income amount after taxes")
-            budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
-            budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+            new_amount = get_float_input(
+                f"Enter your new income amount after taxes (or press Enter to keep '${current_income_amount:.2f}'): ")
+            if new_amount is not None:
+                budget_config['income']['amount'] = new_amount
+
+            new_freq = get_frequency_input(
+                f"How often do you receive this income? (or press Enter to keep '{current_income_freq}'): ")
+            if new_freq is not None:
+                budget_config['income']['frequency'] = new_freq
+
+            if get_yes_no_input("Do you want to update the date of your next upcoming paycheck?"):
+                budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
     else:
         budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
         budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
