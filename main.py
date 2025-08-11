@@ -513,7 +513,7 @@ def plan_budget_for_year():
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
 
-    if get_yes_no_input("Do you want to add/update streaming services?"):
+    if get_yes_no_input("Do you want to add new streaming services?"):
         while True:
             service_name = input(
                 "Enter the name of the streaming service (e.g., Netflix, Spotify) or 'done' to finish: ").lower()
@@ -541,7 +541,7 @@ def plan_budget_for_year():
                 current_streaming.append(
                     {'name': service_name, 'amount': service_amount, 'frequency': 'monthly', 'dates': [],
                      'expiry_date': service_expiry_date, 'category': 'Streaming Services'})  # New: Add a category field
-            if not get_yes_no_input("Add/Update another streaming service?"):
+            if not get_yes_no_input("Add another streaming service?"):
                 break
 
     print("\n--- Manage Miscellaneous Monthly Expenses ---")
@@ -594,7 +594,7 @@ def plan_budget_for_year():
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
 
-    if get_yes_no_input("Do you want to add/update miscellaneous monthly expenses?"):
+    if get_yes_no_input("Do you want to add new miscellaneous monthly expenses?"):
         while True:
             misc_name = input("Enter the name of the miscellaneous expense or 'done' to finish: ").lower()
             if misc_name == 'done': break
@@ -627,7 +627,7 @@ def plan_budget_for_year():
                 current_misc.append(
                     {'name': misc_name, 'amount': misc_amount, 'frequency': 'monthly', 'dates': misc_dates,
                      'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})  # New: Add a category field
-            if not get_yes_no_input("Add/Update another miscellaneous monthly expense?"):
+            if not get_yes_no_input("Add another miscellaneous monthly expense?"):
                 break
 
     print("\n--- Manage One-Time Expenses ---")
@@ -667,7 +667,7 @@ def plan_budget_for_year():
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
 
-    if get_yes_no_input("Do you want to add/update one-time expenses?"):
+    if get_yes_no_input("Do you want to add new one-time expenses?"):
         while True:
             one_time_name = input("Enter the name of the one-time expense or 'done' to finish: ").lower()
             if one_time_name == 'done': break
@@ -688,7 +688,7 @@ def plan_budget_for_year():
                 current_one_time.append({'name': one_time_name, 'amount': one_time_amount, 'frequency': 'one-time',
                                          'dates': [one_time_date], 'expiry_date': None,
                                          'category': 'One-Time'})  # New: Add a category field
-            if not get_yes_no_input("Add/Update another one-time expense?"):
+            if not get_yes_no_input("Add another one-time expense?"):
                 break
 
     print("\n--- Manage Savings Transfers ---")
