@@ -471,6 +471,48 @@ def plan_budget_for_year():
 
     print("\n--- Manage Streaming Services ---")
     current_streaming = budget_config['expense_categories']['Streaming Services']
+    if current_streaming:
+        if get_yes_no_input("Do you want to modify or remove an existing streaming service?"):
+            while True:
+                print("Existing Streaming Services:")
+                for i, service in enumerate(current_streaming):
+                    expiry_info = f"Expires: {service['expiry_date'].strftime('%Y-%m-%d')}" if service[
+                        'expiry_date'] else "No expiry"
+                    print(f"  {i + 1}. {service['name']}: ${service['amount']:.2f} ({expiry_info})")
+
+                try:
+                    choice = input("Enter the number of the service to modify/remove, or 'done' to finish: ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(current_streaming):
+                        selected_service = current_streaming[idx]
+                        if get_yes_no_input(f"Do you want to remove {selected_service['name']}?"):
+                            current_streaming.pop(idx)
+                            print(f"{selected_service['name']} removed.")
+                            if not current_streaming:
+                                print("No more streaming services left to modify.")
+                                break
+                            continue
+
+                        selected_service['name'] = input(
+                            f"Enter new name for {selected_service['name']} (or press Enter to keep '{selected_service['name']}'): ") or \
+                                                   selected_service['name']
+                        selected_service['amount'] = get_float_input(
+                            f"Enter new monthly amount for {selected_service['name']} (current: ${selected_service['amount']:.2f})") or \
+                                                     selected_service['amount']
+
+                        if get_yes_no_input(f"Do you want to update the expiry date for {selected_service['name']}?"):
+                            if get_yes_no_input("Does it now have an expiry date?"):
+                                selected_service['expiry_date'] = get_date_input(
+                                    f"Enter the new expiry date for {selected_service['name']}")
+                            else:
+                                selected_service['expiry_date'] = None
+                        print(f"{selected_service['name']} updated.")
+                    else:
+                        print("Invalid service number.")
+                except ValueError:
+                    print("Invalid input. Please enter a number or 'done'.")
+
     if get_yes_no_input("Do you want to add/update streaming services?"):
         while True:
             service_name = input(
@@ -504,6 +546,54 @@ def plan_budget_for_year():
 
     print("\n--- Manage Miscellaneous Monthly Expenses ---")
     current_misc = budget_config['expense_categories']['Misc Monthly']
+    if current_misc:
+        if get_yes_no_input("Do you want to modify or remove an existing miscellaneous monthly expense?"):
+            while True:
+                print("Existing Miscellaneous Monthly Expenses:")
+                for i, misc in enumerate(current_misc):
+                    expiry_info = f"Expires: {misc['expiry_date'].strftime('%Y-%m-%d')}" if misc[
+                        'expiry_date'] else "No expiry"
+                    print(f"  {i + 1}. {misc['name']}: ${misc['amount']:.2f} ({expiry_info})")
+
+                try:
+                    choice = input("Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(current_misc):
+                        selected_misc = current_misc[idx]
+                        if get_yes_no_input(f"Do you want to remove {selected_misc['name']}?"):
+                            current_misc.pop(idx)
+                            print(f"{selected_misc['name']} removed.")
+                            if not current_misc:
+                                print("No more miscellaneous monthly expenses left to modify.")
+                                break
+                            continue
+
+                        selected_misc['name'] = input(
+                            f"Enter new name for {selected_misc['name']} (or press Enter to keep '{selected_misc['name']}'): ") or \
+                                                selected_misc['name']
+                        selected_misc['amount'] = get_float_input(
+                            f"Enter new monthly amount for {selected_misc['name']} (current: ${selected_misc['amount']:.2f})") or \
+                                                  selected_misc['amount']
+
+                        if get_yes_no_input(f"Do you want to update the expiry date for {selected_misc['name']}?"):
+                            if get_yes_no_input("Does it now have an expiry date?"):
+                                selected_misc['expiry_date'] = get_date_input(
+                                    f"Enter the new expiry date for {selected_misc['name']}")
+                            else:
+                                selected_misc['expiry_date'] = None
+
+                        if get_yes_no_input(
+                                f"Do you want to update specific payment dates for {selected_misc['name']}?"):
+                            selected_misc['dates'] = get_multiple_dates(
+                                f"Enter new specific payment dates for {selected_misc['name']}")
+
+                        print(f"{selected_misc['name']} updated.")
+                    else:
+                        print("Invalid expense number.")
+                except ValueError:
+                    print("Invalid input. Please enter a number or 'done'.")
+
     if get_yes_no_input("Do you want to add/update miscellaneous monthly expenses?"):
         while True:
             misc_name = input("Enter the name of the miscellaneous expense or 'done' to finish: ").lower()
@@ -542,6 +632,41 @@ def plan_budget_for_year():
 
     print("\n--- Manage One-Time Expenses ---")
     current_one_time = budget_config['expense_categories']['One-Time']
+    if current_one_time:
+        if get_yes_no_input("Do you want to modify or remove an existing one-time expense?"):
+            while True:
+                print("Existing One-Time Expenses:")
+                for i, one_time in enumerate(current_one_time):
+                    print(
+                        f"  {i + 1}. {one_time['name']}: ${one_time['amount']:.2f} on {one_time['dates'][0].strftime('%Y-%m-%d')}")
+
+                try:
+                    choice = input("Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(current_one_time):
+                        selected_one_time = current_one_time[idx]
+                        if get_yes_no_input(f"Do you want to remove {selected_one_time['name']}?"):
+                            current_one_time.pop(idx)
+                            print(f"{selected_one_time['name']} removed.")
+                            if not current_one_time:
+                                print("No more one-time expenses left to modify.")
+                                break
+                            continue
+
+                        selected_one_time['name'] = input(
+                            f"Enter new name for {selected_one_time['name']} (or press Enter to keep '{selected_one_time['name']}'): ") or \
+                                                    selected_one_time['name']
+                        selected_one_time['amount'] = get_float_input(
+                            f"Enter new amount for {selected_one_time['name']} (current: ${selected_one_time['amount']:.2f})")
+                        selected_one_time['dates'] = [get_date_input(
+                            f"Enter the new date for {selected_one_time['name']} (current: {selected_one_time['dates'][0].strftime('%Y-%m-%d')})")]
+                        print(f"{selected_one_time['name']} updated.")
+                    else:
+                        print("Invalid expense number.")
+                except ValueError:
+                    print("Invalid input. Please enter a number or 'done'.")
+
     if get_yes_no_input("Do you want to add/update one-time expenses?"):
         while True:
             one_time_name = input("Enter the name of the one-time expense or 'done' to finish: ").lower()
