@@ -37,7 +37,8 @@ def get_float_input(prompt):
 def get_frequency_input(prompt):
     """Helper function to get a valid frequency input."""
     while True:
-        freq = input(prompt + " (weekly, bi-weekly, monthly, bi-monthly, quarterly, yearly, one-time): ").lower()
+        freq = input(
+            prompt + " (weekly, bi-weekly (every 2 weeks), monthly, bi-monthly (every 2 months), quarterly, yearly, one-time): ").lower()
         if freq == '':
             return None  # Return None for empty input
         if freq in ["weekly", "bi-weekly", "monthly", "bi-monthly", "quarterly", "yearly", "one-time"]:
@@ -106,7 +107,7 @@ def is_business_day(date, holidays_set):
     return True
 
 
-def calculate_bi_monthly_dates(start_date, end_date, holidays_set):
+def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
     """
     Generates 15th and last-day-of-month dates between start_date and end_date,
     adjusting to the closest business day *before* if it falls on a weekend or holiday.
@@ -142,6 +143,85 @@ def calculate_bi_monthly_dates(start_date, end_date, holidays_set):
 
     dates = sorted(list(set(dates)))
     return [d for d in dates if d >= datetime.now().date()]
+
+
+def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set):
+    """
+    Generates a list of recurring dates every two months, adjusting for weekends/holidays.
+    """
+    dates = []
+    current_date = start_date
+
+    while current_date <= end_date:
+        adjusted_date = current_date
+        while not is_business_day(adjusted_date, holidays_set):
+            adjusted_date -= timedelta(days=1)
+        dates.append(adjusted_date)
+
+        # Move to two months from now
+        new_month = current_date.month + 2
+        new_year = current_date.year
+        if new_month > 12:
+            new_month -= 12
+            new_year += 1
+        day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+        current_date = datetime(new_year, new_month, day).date()
+
+    return [d for d in dates if d >= datetime.now().date()]
+
+
+def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, initial_day=None):
+    """
+    Generates a list of recurring dates based on frequency, adjusting for weekends/holidays.
+    """
+    dates = []
+    current_date = start_date
+    holidays_set = holidays_set if holidays_set is not None else set()
+
+    while current_date <= end_date:
+        adjusted_date = current_date
+        while not is_business_day(adjusted_date, holidays_set):
+            adjusted_date -= timedelta(days=1)
+        dates.append(adjusted_date)
+
+        if frequency == 'weekly':
+            current_date += timedelta(weeks=1)
+        elif frequency == 'bi-weekly':
+            current_date += timedelta(weeks=2)
+        elif frequency == 'monthly':
+            # Corrected logic for monthly rollover
+            new_month = current_date.month + 1
+            new_year = current_date.year
+            if new_month > 12:
+                new_month = 1
+                new_year += 1
+            # Adjust day if the new month doesn't have enough days
+            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            current_date = datetime(new_year, new_month, day).date()
+        elif frequency == 'bi-monthly':
+            new_month = current_date.month + 2
+            new_year = current_date.year
+            if new_month > 12:
+                new_month -= 12
+                new_year += 1
+            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            current_date = datetime(new_year, new_month, day).date()
+        elif frequency == 'quarterly':
+            # Corrected logic for quarterly rollover
+            new_month = current_date.month + 3
+            new_year = current_date.year
+            if new_month > 12:
+                new_month -= 12
+                new_year += 1
+            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            current_date = datetime(new_year, new_month, day).date()
+        elif frequency == 'yearly':
+            current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
+        else:
+            break
+
+    # Remove dates that are before the current date
+    return sorted([d for d in dates if d >= datetime.now().date()])
 
 
 # --- JSON Save/Load Functions ---
@@ -213,52 +293,6 @@ def load_budget_data(filename="my_budget_data.json"):
         return None
 
 
-def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, initial_day=None):
-    """
-    Generates a list of recurring dates based on frequency, adjusting for weekends/holidays.
-    """
-    dates = []
-    current_date = start_date
-    holidays_set = holidays_set if holidays_set is not None else set()
-
-    while current_date <= end_date:
-        adjusted_date = current_date
-        while not is_business_day(adjusted_date, holidays_set):
-            adjusted_date -= timedelta(days=1)
-        dates.append(adjusted_date)
-
-        if frequency == 'weekly':
-            current_date += timedelta(weeks=1)
-        elif frequency == 'bi-weekly':
-            current_date += timedelta(weeks=2)
-        elif frequency == 'monthly':
-            # Corrected logic for monthly rollover
-            new_month = current_date.month + 1
-            new_year = current_date.year
-            if new_month > 12:
-                new_month = 1
-                new_year += 1
-            # Adjust day if the new month doesn't have enough days
-            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
-            current_date = datetime(new_year, new_month, day).date()
-        elif frequency == 'quarterly':
-            # Corrected logic for quarterly rollover
-            new_month = current_date.month + 3
-            new_year = current_date.year
-            if new_month > 12:
-                new_month -= 12
-                new_year += 1
-            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
-            current_date = datetime(new_year, new_month, day).date()
-        elif frequency == 'yearly':
-            current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
-        else:
-            break
-
-    # Remove dates that are before the current date
-    return sorted([d for d in dates if d >= datetime.now().date()])
-
-
 # --- Expense Management Functions ---
 
 def manage_groceries(budget_config):
@@ -321,11 +355,20 @@ def manage_bills(budget_config, holidays):
                         if new_freq is not None:
                             selected_bill['frequency'] = new_freq
 
-                        if new_freq == 'bi-monthly':
-                            selected_bill['dates'] = calculate_bi_monthly_dates(datetime.now().date(),
-                                                                                datetime(datetime.now().year, 12,
-                                                                                         31).date(), holidays)
-                        elif new_freq not in ["weekly", "bi-monthly"] and get_yes_no_input(
+                        if selected_bill['frequency'] == 'bi-monthly':
+                            if get_yes_no_input(
+                                    f"Do you want to update the start date for this bi-monthly payment? (current start date: {selected_bill['dates'][0] if selected_bill['dates'] else 'None'})"):
+                                start_date = get_date_input("Enter the new start date for this bi-monthly payment")
+                                selected_bill['dates'] = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                                     datetime(
+                                                                                                         datetime.now().year,
+                                                                                                         12, 31).date(),
+                                                                                                     holidays)
+                        elif selected_bill['frequency'] == 'twice-monthly':
+                            selected_bill['dates'] = calculate_twice_monthly_dates(datetime.now().date(),
+                                                                                   datetime(datetime.now().year, 12,
+                                                                                            31).date(), holidays)
+                        elif selected_bill['frequency'] not in ["weekly", "bi-monthly"] and get_yes_no_input(
                                 f"Do you want to update specific payment dates for {selected_bill['name']}? (current dates: {[d.strftime('%Y-%m-%d') for d in selected_bill['dates']]})"):
                             selected_bill['dates'] = get_multiple_dates(
                                 f"Enter new specific payment dates for {selected_bill['name']}")
@@ -355,23 +398,38 @@ def manage_bills(budget_config, holidays):
         while True:
             bill_name = input("Enter the name of the new bill: ")
             bill_amount = get_float_input(f"Enter the amount for {bill_name}")
-            bill_frequency = get_frequency_input(f"How often do you pay {bill_name}?")
-
             bill_expiry_date = None
             if get_yes_no_input(f"Does {bill_name} have an expiry date?"):
                 bill_expiry_date = get_date_input(f"Enter the expiry date for {bill_name}")
 
+            bill_frequency = None
             bill_dates = []
-            if bill_frequency == 'bi-monthly':
-                bill_dates = calculate_bi_monthly_dates(datetime.now().date(),
-                                                        datetime(datetime.now().year, 12, 31).date(), holidays)
-            elif bill_frequency not in ["weekly"] and get_yes_no_input(
-                    f"Do you have specific payment dates for {bill_name}?"):
+
+            if get_yes_no_input("Do you want to set a periodic schedule? (e.g., weekly, monthly, bi-monthly)"):
+                bill_frequency = get_frequency_input(f"How often do you pay {bill_name}?")
+                if bill_frequency == 'bi-monthly':
+                    start_date = get_date_input("Enter the start date for this bi-monthly payment")
+                    bill_dates = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                             datetime(datetime.now().year, 12,
+                                                                                      31).date(), holidays)
+                elif bill_frequency in ["weekly", "one-time"]:
+                    # These frequencies don't need a specific start date to be calculated in this way
+                    if bill_frequency == "one-time":
+                        bill_dates.append(
+                            get_date_input(f"Enter the specific date for this one-time {bill_name} payment"))
+                    elif bill_frequency == "weekly":
+                        pass
+                else:
+                    start_date = get_date_input("Enter the start date for this payment schedule")
+                    bill_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
+                                                     bill_frequency, holidays)
+            else:
+                bill_frequency = get_frequency_input(
+                    f"How often do you pay {bill_name}? (e.g. one-time, monthly, bi-monthly etc.)")
+                if bill_frequency != "one-time":
+                    print(
+                        "You've chosen a recurring frequency but not a periodic schedule. Please enter the specific dates manually.")
                 bill_dates = get_multiple_dates(f"Enter a specific payment date for {bill_name}")
-                if not bill_dates and bill_frequency != "one-time":
-                    print("Warning: For recurring expenses without specific dates, the program will estimate.")
-            elif bill_frequency == "one-time":
-                bill_dates.append(get_date_input(f"Enter the specific date for this one-time {bill_name} payment"))
 
             if bill_dates and bill_frequency not in ["weekly", "one-time", "bi-monthly"]:
                 adjusted_bill_dates = []
@@ -394,7 +452,7 @@ def manage_bills(budget_config, holidays):
                 break
 
 
-def manage_streaming(budget_config):
+def manage_streaming(budget_config, holidays):
     print("\n--- Manage Streaming Services ---")
     current_streaming = budget_config['expense_categories']['Streaming Services']
     if current_streaming:
@@ -404,7 +462,8 @@ def manage_streaming(budget_config):
                 for i, service in enumerate(current_streaming):
                     expiry_info = f", Expires: {service['expiry_date'].strftime('%Y-%m-%d')}" if service[
                         'expiry_date'] else ", No expiry"
-                    print(f"  {i + 1}. {service['name']}: ${service['amount']:.2f} ({expiry_info})")
+                    print(
+                        f"  {i + 1}. {service['name']}: ${service['amount']:.2f} ({service['frequency']}{expiry_info})")
                 try:
                     choice = input("Enter the number of the service to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -429,12 +488,33 @@ def manage_streaming(budget_config):
                         if new_amount is not None:
                             selected_service['amount'] = new_amount
 
+                        new_freq = get_frequency_input(
+                            f"Enter new frequency for {selected_service['name']} (or press Enter to keep '{selected_service['frequency']}'): ")
+                        if new_freq is not None:
+                            selected_service['frequency'] = new_freq
+
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_service['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_service['expiry_date'] = get_date_input(
                                     f"Enter the new expiry date for {selected_service['name']}")
                             else:
                                 selected_service['expiry_date'] = None
+
+                        if selected_service['frequency'] == 'bi-monthly':
+                            if get_yes_no_input(
+                                    f"Do you want to update the start date for this bi-monthly payment? (current start date: {selected_service['dates'][0] if selected_service['dates'] else 'None'})"):
+                                start_date = get_date_input("Enter the new start date for this bi-monthly payment")
+                                selected_service['dates'] = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                                        datetime(
+                                                                                                            datetime.now().year,
+                                                                                                            12,
+                                                                                                            31).date(),
+                                                                                                        holidays)
+                        elif get_yes_no_input(
+                                f"Do you want to update specific payment dates for {selected_service['name']}?"):
+                            selected_service['dates'] = get_multiple_dates(
+                                f"Enter new specific payment dates for {selected_service['name']}")
+
                         print(f"{selected_service['name']} updated.")
                     else:
                         print("Invalid service number.")
@@ -449,14 +529,46 @@ def manage_streaming(budget_config):
             service_expiry_date = None
             if get_yes_no_input(f"Does {service_name} have an expiry date?"):
                 service_expiry_date = get_date_input(f"Enter the expiry date for {service_name}")
+
+            service_frequency = None
+            service_dates = []
+
+            if get_yes_no_input("Do you want to set a periodic schedule?"):
+                service_frequency = get_frequency_input(f"How often do you pay {service_name}?")
+                if service_frequency == 'bi-monthly':
+                    start_date = get_date_input("Enter the start date for this bi-monthly payment")
+                    service_dates = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                datetime(datetime.now().year, 12,
+                                                                                         31).date(), holidays)
+                elif service_frequency in ["weekly", "one-time"]:
+                    if service_frequency == "one-time":
+                        service_dates.append(
+                            get_date_input(f"Enter the specific date for this one-time {service_name} payment"))
+                    elif service_frequency == "weekly":
+                        pass
+                else:
+                    start_date = get_date_input("Enter the start date for this payment schedule")
+                    service_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
+                                                        service_frequency, holidays)
+            else:
+                service_frequency = get_frequency_input(
+                    f"How often do you pay {service_name}? (e.g. one-time, monthly, bi-monthly etc.)")
+                if service_frequency != "one-time":
+                    print(
+                        "You've chosen a recurring frequency but not a periodic schedule. Please enter the specific dates manually.")
+                service_dates = get_multiple_dates(f"Enter a specific pay date for {service_name}")
+
             current_streaming.append(
-                {'name': service_name, 'amount': service_amount, 'frequency': 'monthly', 'dates': [],
+                {'name': service_name, 'amount': service_amount, 'frequency': service_frequency, 'dates': service_dates,
                  'expiry_date': service_expiry_date, 'category': 'Streaming Services'})
             if not get_yes_no_input("Add another streaming service?"):
                 break
 
 
-def manage_misc_monthly(budget_config):
+def manage_misc_monthly(budget_config, holidays):
+    """
+    Manages miscellaneous monthly expenses, now with holiday adjustments for bi-monthly payments.
+    """
     print("\n--- Manage Miscellaneous Monthly Expenses ---")
     current_misc = budget_config['expense_categories']['Misc Monthly']
     if current_misc:
@@ -466,7 +578,7 @@ def manage_misc_monthly(budget_config):
                 for i, misc in enumerate(current_misc):
                     expiry_info = f", Expires: {misc['expiry_date'].strftime('%Y-%m-%d')}" if misc[
                         'expiry_date'] else ", No expiry"
-                    print(f"  {i + 1}. {misc['name']}: ${misc['amount']:.2f} ({expiry_info})")
+                    print(f"  {i + 1}. {misc['name']}: ${misc['amount']:.2f} ({misc['frequency']}{expiry_info})")
                 try:
                     choice = input("Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -491,6 +603,11 @@ def manage_misc_monthly(budget_config):
                         if new_amount is not None:
                             selected_misc['amount'] = new_amount
 
+                        new_freq = get_frequency_input(
+                            f"Enter new frequency for {selected_misc['name']} (or press Enter to keep '{selected_misc['frequency']}'): ")
+                        if new_freq is not None:
+                            selected_misc['frequency'] = new_freq
+
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_misc['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_misc['expiry_date'] = get_date_input(
@@ -498,7 +615,16 @@ def manage_misc_monthly(budget_config):
                             else:
                                 selected_misc['expiry_date'] = None
 
-                        if get_yes_no_input(
+                        if selected_misc['frequency'] == 'bi-monthly':
+                            if get_yes_no_input(
+                                    f"Do you want to update the start date for this bi-monthly payment? (current start date: {selected_misc['dates'][0] if selected_misc['dates'] else 'None'})"):
+                                start_date = get_date_input("Enter the new start date for this bi-monthly payment")
+                                selected_misc['dates'] = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                                     datetime(
+                                                                                                         datetime.now().year,
+                                                                                                         12, 31).date(),
+                                                                                                     holidays)
+                        elif get_yes_no_input(
                                 f"Do you want to update specific payment dates for {selected_misc['name']}?"):
                             selected_misc['dates'] = get_multiple_dates(
                                 f"Enter new specific payment dates for {selected_misc['name']}")
@@ -513,15 +639,41 @@ def manage_misc_monthly(budget_config):
         while True:
             misc_name = input("Enter the name of the miscellaneous expense or 'done' to finish: ").lower()
             if misc_name == 'done': break
-            misc_amount = get_float_input(f"Enter the monthly amount for {misc_name}")
+            misc_amount = get_float_input(f"Enter the amount for {misc_name}")
             misc_expiry_date = None
             if get_yes_no_input(f"Does {misc_name} have an expiry date?"):
                 misc_expiry_date = get_date_input(f"Enter the expiry date for {misc_name}")
+
+            misc_frequency = None
             misc_dates = []
-            if get_yes_no_input(f"Do you have specific payment dates for {misc_name}?"):
+
+            if get_yes_no_input("Do you want to set a periodic schedule?"):
+                misc_frequency = get_frequency_input(f"How often do you pay {misc_name}?")
+                if misc_frequency == 'bi-monthly':
+                    start_date = get_date_input("Enter the start date for this bi-monthly payment")
+                    misc_dates = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                             datetime(datetime.now().year, 12,
+                                                                                      31).date(), holidays)
+                elif misc_frequency in ["weekly", "one-time"]:
+                    if misc_frequency == "one-time":
+                        misc_dates.append(
+                            get_date_input(f"Enter the specific date for this one-time {misc_name} payment"))
+                    elif misc_frequency == "weekly":
+                        pass
+                else:
+                    start_date = get_date_input("Enter the start date for this payment schedule")
+                    misc_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
+                                                     misc_frequency, holidays)
+            else:
+                misc_frequency = get_frequency_input(
+                    f"How often do you pay {misc_name}? (e.g. one-time, monthly, bi-monthly etc.)")
+                if misc_frequency != "one-time":
+                    print(
+                        "You've chosen a recurring frequency but not a periodic schedule. Please enter the specific dates manually.")
                 misc_dates = get_multiple_dates(f"Enter a specific pay date for {misc_name}")
+
             current_misc.append(
-                {'name': misc_name, 'amount': misc_amount, 'frequency': 'monthly', 'dates': misc_dates,
+                {'name': misc_name, 'amount': misc_amount, 'frequency': misc_frequency, 'dates': misc_dates,
                  'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})
             if not get_yes_no_input("Add another miscellaneous monthly expense?"):
                 break
@@ -622,9 +774,15 @@ def manage_savings(budget_config, holidays):
                             selected_transfer['frequency'] = new_freq
 
                         if new_freq == 'bi-monthly':
-                            selected_transfer['dates'] = calculate_bi_monthly_dates(datetime.now().date(),
-                                                                                    datetime(datetime.now().year, 12,
-                                                                                             31).date(), holidays)
+                            if get_yes_no_input(
+                                    f"Do you want to update the start date for this bi-monthly transfer? (current start date: {selected_transfer['dates'][0] if selected_transfer['dates'] else 'None'})"):
+                                start_date = get_date_input("Enter the new start date for this bi-monthly transfer")
+                                selected_transfer['dates'] = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                                         datetime(
+                                                                                                             datetime.now().year,
+                                                                                                             12,
+                                                                                                             31).date(),
+                                                                                                         holidays)
                         elif new_freq != "weekly" and get_yes_no_input(
                                 f"Do you want to update specific dates for this transfer? (current: {[d.strftime('%Y-%m-%d') for d in selected_transfer['dates']]})"):
                             selected_transfer['dates'] = get_multiple_dates(
@@ -639,27 +797,34 @@ def manage_savings(budget_config, holidays):
     if get_yes_no_input("Do you want to add a new savings transfer?"):
         while True:
             savings_amount = get_float_input("Enter the amount you want to transfer to savings per period")
-            savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
+
+            savings_frequency = None
             s_dates = []
-            if savings_frequency == "bi-monthly":
-                s_dates = calculate_bi_monthly_dates(datetime.now().date(),
-                                                     datetime(datetime.now().year, 12, 31).date(), holidays)
-            elif savings_frequency == "one-time":
-                s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
+
+            if get_yes_no_input("Do you want to set a periodic schedule?"):
+                savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
+                if savings_frequency == 'bi-monthly':
+                    start_date = get_date_input("Enter the start date for this bi-monthly transfer")
+                    s_dates = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                          datetime(datetime.now().year, 12, 31).date(),
+                                                                          holidays)
+                elif savings_frequency in ["weekly", "one-time"]:
+                    if savings_frequency == "one-time":
+                        s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
+                    elif savings_frequency == "weekly":
+                        pass
+                else:
+                    start_date = get_date_input("Enter the start date for this transfer schedule")
+                    s_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
+                                                  savings_frequency, holidays)
             else:
-                if get_yes_no_input("Do you have specific dates for savings transfers for the rest of the year?"):
-                    s_dates = get_multiple_dates("Enter a savings transfer date")
-                    if not s_dates:
-                        print(
-                            "Warning: For recurring savings transfers without specific dates, the program will estimate.")
-            if s_dates and savings_frequency not in ["weekly", "one-time", "bi-monthly"]:
-                adjusted_s_dates = []
-                for s_date in s_dates:
-                    adjusted_date = s_date
-                    while not is_business_day(adjusted_date, holidays):
-                        adjusted_date -= timedelta(days=1)
-                    adjusted_s_dates.append(adjusted_date)
-                s_dates = adjusted_s_dates
+                savings_frequency = get_frequency_input(
+                    "How often do you want to transfer to savings? (e.g. one-time, monthly, bi-monthly etc.)")
+                if savings_frequency != "one-time":
+                    print(
+                        "You've chosen a recurring frequency but not a periodic schedule. Please enter the specific dates manually.")
+                s_dates = get_multiple_dates("Enter a savings transfer date")
+
             current_savings_transfers.append(
                 {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates})
             if not get_yes_no_input("Add another savings transfer?"):
@@ -685,19 +850,31 @@ def manage_income(budget_config, end_of_year, holidays):
                 budget_config['income']['frequency'] = new_freq
 
             if new_freq == 'bi-monthly':
-                budget_config['income']['dates'] = calculate_bi_monthly_dates(datetime.now().date(), end_of_year,
-                                                                              holidays)
+                if get_yes_no_input("Do you want to update the start date for this bi-monthly income?"):
+                    start_date = get_date_input("Enter the start date for this bi-monthly income")
+                    budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                                   end_of_year,
+                                                                                                   holidays)
+            elif new_freq == 'twice-monthly':
+                budget_config['income']['dates'] = calculate_twice_monthly_dates(datetime.now().date(), end_of_year,
+                                                                                 holidays)
             elif get_yes_no_input("Do you want to update the date of your next upcoming paycheck?"):
                 budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
     else:
         budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
         budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
         if budget_config['income']['frequency'] == 'bi-monthly':
-            budget_config['income']['dates'] = calculate_bi_monthly_dates(datetime.now().date(), end_of_year, holidays)
+            start_date = get_date_input("Enter the start date for this bi-monthly income")
+            budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date, end_of_year,
+                                                                                           holidays)
+        elif budget_config['income']['frequency'] == 'twice-monthly':
+            budget_config['income']['dates'] = calculate_twice_monthly_dates(datetime.now().date(), end_of_year,
+                                                                             holidays)
         else:
             budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
 
-    if budget_config['income']['frequency'] != 'one-time' and budget_config['income']['frequency'] != 'bi-monthly' and \
+    if budget_config['income']['frequency'] != 'one-time' and budget_config['income']['frequency'] not in ['bi-monthly',
+                                                                                                           'twice-monthly'] and \
             budget_config['income']['dates']:
         budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_of_year,
                                                                budget_config['income']['frequency'], holidays)
@@ -733,9 +910,10 @@ def modify_budget_menu(budget_config, holidays, end_of_year):
         elif choice == '3':
             manage_bills(budget_config, holidays)
         elif choice == '4':
-            manage_streaming(budget_config)
+            manage_streaming(budget_config, holidays)
         elif choice == '5':
-            manage_misc_monthly(budget_config)
+            # FIX: Pass holidays to manage_misc_monthly
+            manage_misc_monthly(budget_config, holidays)
         elif choice == '6':
             manage_one_time(budget_config)
         elif choice == '7':
@@ -817,8 +995,9 @@ def plan_budget_for_year():
     manage_income(budget_config, end_of_year, holidays)
     manage_groceries(budget_config)
     manage_bills(budget_config, holidays)
-    manage_streaming(budget_config)
-    manage_misc_monthly(budget_config)
+    manage_streaming(budget_config, holidays)
+    # FIX: Pass holidays to manage_misc_monthly
+    manage_misc_monthly(budget_config, holidays)
     manage_one_time(budget_config)
     manage_savings(budget_config, holidays)
 
@@ -884,7 +1063,7 @@ def plan_budget_for_year():
 
             if frequency == 'weekly':
                 should_apply_expense_this_week = True
-            elif frequency in ['bi-weekly', 'monthly', 'quarterly', 'yearly', 'one-time', 'bi-monthly']:
+            elif frequency in ['bi-weekly', 'monthly', 'bi-monthly', 'quarterly', 'yearly', 'one-time']:
                 if item_dates:
                     for expense_date in item_dates:
                         if week_start <= expense_date <= week_end:
@@ -901,6 +1080,9 @@ def plan_budget_for_year():
                         should_apply_expense_this_week = True
                 elif frequency == 'yearly':
                     if week_start.month == 1 and week_start.day <= 7:
+                        should_apply_expense_this_week = True
+                elif frequency == 'bi-monthly':
+                    if (week_start.month - today.month) % 2 == 0 and week_start.day <= 7:
                         should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
