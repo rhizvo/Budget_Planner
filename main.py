@@ -255,104 +255,10 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, init
     return sorted([d for d in dates if d >= datetime.now().date()])
 
 
-# --- Main Budget Planning Function ---
+# --- Expense Management Functions ---
 
-def plan_budget_for_year():
-    print("--- Budget Planner for the Rest of the Year ---")
-
-    today = datetime.now().date()
-    end_of_year = datetime(today.year, 12, 31).date()
-
-    budget_config_filename = "my_budget_data.json"
-
-    budget_config = {
-        'initial_debit_balance': 0.0,
-        'initial_savings_balance': 0.0,
-        'income': {
-            'amount': 0.0,
-            'frequency': 'bi-weekly',
-            'dates': []
-        },
-        'expense_categories': {
-            'Groceries': [],
-            'Bills': [],
-            'Streaming Services': [],
-            'Misc Monthly': [],
-            'One-Time': []
-        },
-        'savings_transfers': [],
-        'holiday_filepath': ""
-    }
-
-    if os.path.exists(budget_config_filename):
-        if get_yes_no_input(f"Do you want to load an existing budget from '{budget_config_filename}'?"):
-            loaded_data = load_budget_data(budget_config_filename)
-            if loaded_data:
-                budget_config.update(loaded_data)
-            else:
-                print("Failed to load existing budget. Starting a new budget.")
-        else:
-            print("Starting a new budget.")
-    else:
-        print("No existing budget file found. Starting a new budget.")
-
-    print("\n--- Initial Balances ---")
-    if budget_config['initial_debit_balance'] > 0 or budget_config['initial_savings_balance'] > 0:
-        print(f"Current initial debit balance: ${budget_config['initial_debit_balance']:.2f}")
-        print(f"Current initial savings balance: ${budget_config['initial_savings_balance']:.2f}")
-        if get_yes_no_input("Do you want to update your initial balances?"):
-            budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
-            budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
-    else:
-        budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
-        budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
-
-    print("\n--- Holiday Information ---")
-    if budget_config['holiday_filepath'] and os.path.exists(budget_config['holiday_filepath']):
-        print(f"Current holiday file path: {budget_config['holiday_filepath']}")
-        if get_yes_no_input("Do you want to change the holiday file path?"):
-            budget_config['holiday_filepath'] = input(
-                "Enter the new path to your holiday list file (e.g., holidays.txt): ")
-    else:
-        budget_config['holiday_filepath'] = input("Enter the path to your holiday list file (e.g., holidays.txt): ")
-
-    holidays = load_holidays(budget_config['holiday_filepath'])
-    if holidays:
-        print(f"Loaded {len(holidays)} holidays.")
-    else:
-        print("No holidays loaded or file not found. Payday adjustments will only consider weekends.")
-
-    print("\n--- Income Information ---")
-    current_income_amount = budget_config['income']['amount']
-    current_income_freq = budget_config['income']['frequency']
-
-    if current_income_amount > 0:
-        print(f"Current income: ${current_income_amount:.2f} ({current_income_freq})")
-        if get_yes_no_input("Do you want to update your income information?"):
-            budget_config['income']['amount'] = get_float_input("Enter your new income amount after taxes")
-            budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
-            budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
-    else:
-        budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
-        budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
-        budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
-
-    # Recalculate income dates
-    if budget_config['income']['frequency'] == 'bi-monthly':
-        budget_config['income']['dates'] = get_bi_monthly_pay_dates(today, end_of_year, holidays)
-    elif budget_config['income']['frequency'] != 'one-time' and budget_config['income']['dates']:
-        budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_of_year,
-                                                               budget_config['income']['frequency'], holidays)
-
-    if not budget_config['income']['dates']:
-        print("Warning: No pay dates were generated for the rest of the year. Please check your input.")
-    else:
-        print("\nCalculated Pay Dates for the rest of the year (adjusted for weekends/holidays):")
-        for date in budget_config['income']['dates']:
-            print(f"- {date.strftime('%Y-%m-%d')}")
-
-    print("\n--- Manage Your Expenses ---")
-
+def manage_groceries(budget_config):
+    print("\n--- Manage Your Groceries ---")
     if budget_config['expense_categories']['Groceries']:
         current_groceries = budget_config['expense_categories']['Groceries'][0]['amount']
         print(f"Current typical weekly grocery expense: ${current_groceries:.2f}")
@@ -365,13 +271,13 @@ def plan_budget_for_year():
             {'name': 'Groceries', 'amount': groceries_amount, 'frequency': 'weekly', 'dates': [], 'expiry_date': None,
              'category': 'Groceries'})
 
+
+def manage_bills(budget_config, holidays):
     print("\n--- Manage Your Bills ---")
     current_bills = budget_config['expense_categories']['Bills']
     if current_bills:
-        # Initial check to see if there are bills to modify
         if get_yes_no_input("Do you want to modify or remove an existing bill?"):
             while True:
-                # Display the list of existing bills at the beginning of the loop
                 print("Existing Bills:")
                 for i, bill in enumerate(current_bills):
                     expiry_info = f", Expires: {bill['expiry_date'].strftime('%Y-%m-%d')}" if bill[
@@ -391,7 +297,7 @@ def plan_budget_for_year():
                             if not current_bills:
                                 print("No more bills left to modify.")
                                 break
-                            continue  # Continue the loop to show the updated list
+                            continue
 
                         selected_bill['name'] = input(
                             f"Enter new name for {selected_bill['name']} (or press Enter to keep '{selected_bill['name']}'): ") or \
@@ -464,11 +370,13 @@ def plan_budget_for_year():
                 'frequency': bill_frequency,
                 'dates': bill_dates,
                 'expiry_date': bill_expiry_date,
-                'category': 'Bills'  # New: Add a category field
+                'category': 'Bills'
             })
             if not get_yes_no_input("Add another bill?"):
                 break
 
+
+def manage_streaming(budget_config):
     print("\n--- Manage Streaming Services ---")
     current_streaming = budget_config['expense_categories']['Streaming Services']
     if current_streaming:
@@ -476,10 +384,9 @@ def plan_budget_for_year():
             while True:
                 print("Existing Streaming Services:")
                 for i, service in enumerate(current_streaming):
-                    expiry_info = f"Expires: {service['expiry_date'].strftime('%Y-%m-%d')}" if service[
-                        'expiry_date'] else "No expiry"
+                    expiry_info = f", Expires: {service['expiry_date'].strftime('%Y-%m-%d')}" if service[
+                        'expiry_date'] else ", No expiry"
                     print(f"  {i + 1}. {service['name']}: ${service['amount']:.2f} ({expiry_info})")
-
                 try:
                     choice = input("Enter the number of the service to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -493,14 +400,12 @@ def plan_budget_for_year():
                                 print("No more streaming services left to modify.")
                                 break
                             continue
-
                         selected_service['name'] = input(
                             f"Enter new name for {selected_service['name']} (or press Enter to keep '{selected_service['name']}'): ") or \
                                                    selected_service['name']
                         selected_service['amount'] = get_float_input(
                             f"Enter new monthly amount for {selected_service['name']} (current: ${selected_service['amount']:.2f})") or \
                                                      selected_service['amount']
-
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_service['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_service['expiry_date'] = get_date_input(
@@ -512,38 +417,23 @@ def plan_budget_for_year():
                         print("Invalid service number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
-
-    if get_yes_no_input("Do you want to add new streaming services?"):
+    if get_yes_no_input("Do you want to add a new streaming service?"):
         while True:
             service_name = input(
                 "Enter the name of the streaming service (e.g., Netflix, Spotify) or 'done' to finish: ").lower()
             if service_name == 'done': break
-
-            found_service = next((s for s in current_streaming if s['name'].lower() == service_name), None)
-
-            if found_service:
-                print(
-                    f"Service '{found_service['name']}' already exists: ${found_service['amount']:.2f} (Expires: {found_service['expiry_date'].strftime('%Y-%m-%d') if found_service['expiry_date'] else 'None'})")
-                if get_yes_no_input("Do you want to update this service?"):
-                    found_service['amount'] = get_float_input(
-                        f"Enter new monthly amount for {found_service['name']} (current: ${found_service['amount']:.2f})")
-                    if get_yes_no_input(f"Do you want to update the expiry date for {found_service['name']}?"):
-                        if get_yes_no_input("Does it now have an expiry date?"):
-                            found_service['expiry_date'] = get_date_input(
-                                f"Enter the new expiry date for {found_service['name']}")
-                        else:
-                            found_service['expiry_date'] = None
-            else:
-                service_amount = get_float_input(f"Enter the monthly amount for {service_name}")
-                service_expiry_date = None
-                if get_yes_no_input(f"Does {service_name} have an expiry date?"):
-                    service_expiry_date = get_date_input(f"Enter the expiry date for {service_name}")
-                current_streaming.append(
-                    {'name': service_name, 'amount': service_amount, 'frequency': 'monthly', 'dates': [],
-                     'expiry_date': service_expiry_date, 'category': 'Streaming Services'})  # New: Add a category field
+            service_amount = get_float_input(f"Enter the monthly amount for {service_name}")
+            service_expiry_date = None
+            if get_yes_no_input(f"Does {service_name} have an expiry date?"):
+                service_expiry_date = get_date_input(f"Enter the expiry date for {service_name}")
+            current_streaming.append(
+                {'name': service_name, 'amount': service_amount, 'frequency': 'monthly', 'dates': [],
+                 'expiry_date': service_expiry_date, 'category': 'Streaming Services'})
             if not get_yes_no_input("Add another streaming service?"):
                 break
 
+
+def manage_misc_monthly(budget_config):
     print("\n--- Manage Miscellaneous Monthly Expenses ---")
     current_misc = budget_config['expense_categories']['Misc Monthly']
     if current_misc:
@@ -551,10 +441,9 @@ def plan_budget_for_year():
             while True:
                 print("Existing Miscellaneous Monthly Expenses:")
                 for i, misc in enumerate(current_misc):
-                    expiry_info = f"Expires: {misc['expiry_date'].strftime('%Y-%m-%d')}" if misc[
-                        'expiry_date'] else "No expiry"
+                    expiry_info = f", Expires: {misc['expiry_date'].strftime('%Y-%m-%d')}" if misc[
+                        'expiry_date'] else ", No expiry"
                     print(f"  {i + 1}. {misc['name']}: ${misc['amount']:.2f} ({expiry_info})")
-
                 try:
                     choice = input("Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -568,68 +457,46 @@ def plan_budget_for_year():
                                 print("No more miscellaneous monthly expenses left to modify.")
                                 break
                             continue
-
                         selected_misc['name'] = input(
                             f"Enter new name for {selected_misc['name']} (or press Enter to keep '{selected_misc['name']}'): ") or \
                                                 selected_misc['name']
                         selected_misc['amount'] = get_float_input(
                             f"Enter new monthly amount for {selected_misc['name']} (current: ${selected_misc['amount']:.2f})") or \
                                                   selected_misc['amount']
-
                         if get_yes_no_input(f"Do you want to update the expiry date for {selected_misc['name']}?"):
                             if get_yes_no_input("Does it now have an expiry date?"):
                                 selected_misc['expiry_date'] = get_date_input(
                                     f"Enter the new expiry date for {selected_misc['name']}")
                             else:
                                 selected_misc['expiry_date'] = None
-
                         if get_yes_no_input(
                                 f"Do you want to update specific payment dates for {selected_misc['name']}?"):
                             selected_misc['dates'] = get_multiple_dates(
                                 f"Enter new specific payment dates for {selected_misc['name']}")
-
                         print(f"{selected_misc['name']} updated.")
                     else:
                         print("Invalid expense number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
-
-    if get_yes_no_input("Do you want to add new miscellaneous monthly expenses?"):
+    if get_yes_no_input("Do you want to add a new miscellaneous monthly expense?"):
         while True:
             misc_name = input("Enter the name of the miscellaneous expense or 'done' to finish: ").lower()
             if misc_name == 'done': break
-
-            found_misc = next((m for m in current_misc if m['name'].lower() == misc_name), None)
-
-            if found_misc:
-                print(
-                    f"Expense '{found_misc['name']}' already exists: ${found_misc['amount']:.2f} (Expires: {found_misc['expiry_date'].strftime('%Y-%m-%d') if found_misc['expiry_date'] else 'None'})")
-                if get_yes_no_input("Do you want to update this expense?"):
-                    found_misc['amount'] = get_float_input(
-                        f"Enter new monthly amount for {found_misc['name']} (current: ${found_misc['amount']:.2f})")
-                    if get_yes_no_input(f"Do you want to update the expiry date for {found_misc['name']}?"):
-                        if get_yes_no_input("Does it now have an expiry date?"):
-                            found_misc['expiry_date'] = get_date_input(
-                                f"Enter the new expiry date for {found_misc['name']}")
-                        else:
-                            found_misc['expiry_date'] = None
-                    if get_yes_no_input(f"Do you want to update specific payment dates for {found_misc['name']}?"):
-                        found_misc['dates'] = get_multiple_dates(
-                            f"Enter new specific payment dates for {found_misc['name']}")
-            else:
-                misc_amount = get_float_input(f"Enter the monthly amount for {misc_name}")
-                misc_expiry_date = None
-                if get_yes_no_input(f"Does {misc_name} have an expiry date?"):
-                    misc_expiry_date = get_date_input(f"Enter the expiry date for {misc_name}")
-                misc_dates = []
-                if get_yes_no_input(f"Do you have specific payment dates for {misc_name}?"):
-                    misc_dates = get_multiple_dates(f"Enter a specific pay date for {misc_name}")
-                current_misc.append(
-                    {'name': misc_name, 'amount': misc_amount, 'frequency': 'monthly', 'dates': misc_dates,
-                     'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})  # New: Add a category field
+            misc_amount = get_float_input(f"Enter the monthly amount for {misc_name}")
+            misc_expiry_date = None
+            if get_yes_no_input(f"Does {misc_name} have an expiry date?"):
+                misc_expiry_date = get_date_input(f"Enter the expiry date for {misc_name}")
+            misc_dates = []
+            if get_yes_no_input(f"Do you have specific payment dates for {misc_name}?"):
+                misc_dates = get_multiple_dates(f"Enter a specific pay date for {misc_name}")
+            current_misc.append(
+                {'name': misc_name, 'amount': misc_amount, 'frequency': 'monthly', 'dates': misc_dates,
+                 'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})
             if not get_yes_no_input("Add another miscellaneous monthly expense?"):
                 break
 
+
+def manage_one_time(budget_config):
     print("\n--- Manage One-Time Expenses ---")
     current_one_time = budget_config['expense_categories']['One-Time']
     if current_one_time:
@@ -639,7 +506,6 @@ def plan_budget_for_year():
                 for i, one_time in enumerate(current_one_time):
                     print(
                         f"  {i + 1}. {one_time['name']}: ${one_time['amount']:.2f} on {one_time['dates'][0].strftime('%Y-%m-%d')}")
-
                 try:
                     choice = input("Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -653,7 +519,6 @@ def plan_budget_for_year():
                                 print("No more one-time expenses left to modify.")
                                 break
                             continue
-
                         selected_one_time['name'] = input(
                             f"Enter new name for {selected_one_time['name']} (or press Enter to keep '{selected_one_time['name']}'): ") or \
                                                     selected_one_time['name']
@@ -666,42 +531,28 @@ def plan_budget_for_year():
                         print("Invalid expense number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
-
-    if get_yes_no_input("Do you want to add new one-time expenses?"):
+    if get_yes_no_input("Do you want to add a new one-time expense?"):
         while True:
             one_time_name = input("Enter the name of the one-time expense or 'done' to finish: ").lower()
             if one_time_name == 'done': break
-
-            found_one_time = next((o for o in current_one_time if o['name'].lower() == one_time_name), None)
-
-            if found_one_time:
-                print(
-                    f"Expense '{found_one_time['name']}' already exists: ${found_one_time['amount']:.2f} on {found_one_time['dates'][0].strftime('%Y-%m-%d')}")
-                if get_yes_no_input("Do you want to update this expense?"):
-                    found_one_time['amount'] = get_float_input(
-                        f"Enter new amount for {found_one_time['name']} (current: ${found_one_time['amount']:.2f})")
-                    found_one_time['dates'] = [get_date_input(
-                        f"Enter the new date for {found_one_time['name']} (current: {found_one_time['dates'][0].strftime('%Y-%m-%d')})")]
-            else:
-                one_time_amount = get_float_input(f"Enter the amount for {one_time_name}")
-                one_time_date = get_date_input(f"Enter the date for {one_time_name}")
-                current_one_time.append({'name': one_time_name, 'amount': one_time_amount, 'frequency': 'one-time',
-                                         'dates': [one_time_date], 'expiry_date': None,
-                                         'category': 'One-Time'})  # New: Add a category field
+            one_time_amount = get_float_input(f"Enter the amount for {one_time_name}")
+            one_time_date = get_date_input(f"Enter the date for {one_time_name}")
+            current_one_time.append({'name': one_time_name, 'amount': one_time_amount, 'frequency': 'one-time',
+                                     'dates': [one_time_date], 'expiry_date': None,
+                                     'category': 'One-Time'})
             if not get_yes_no_input("Add another one-time expense?"):
                 break
 
+
+def manage_savings(budget_config, holidays):
     print("\n--- Manage Savings Transfers ---")
     current_savings_transfers = budget_config['savings_transfers']
     if current_savings_transfers:
-        # Initial check to see if there are transfers to modify
         if get_yes_no_input("Do you want to modify or remove an existing savings transfer?"):
             while True:
-                # Display the list of existing transfers at the beginning of the loop
                 print("Existing Savings Transfers:")
                 for i, transfer in enumerate(current_savings_transfers):
                     print(f"  {i + 1}. ${transfer['amount']:.2f} ({transfer['frequency']})")
-
                 try:
                     choice = input("Enter the number of the transfer to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -714,8 +565,7 @@ def plan_budget_for_year():
                             if not current_savings_transfers:
                                 print("No more savings transfers left to modify.")
                                 break
-                            continue  # Continue the loop to show the updated list
-
+                            continue
                         selected_transfer['amount'] = get_float_input(
                             f"Enter new amount for transfer (current: ${selected_transfer['amount']:.2f})")
                         selected_transfer['frequency'] = get_frequency_input(
@@ -732,7 +582,6 @@ def plan_budget_for_year():
                         print("Invalid transfer number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
-
     if get_yes_no_input("Do you want to add a new savings transfer?"):
         while True:
             savings_amount = get_float_input("Enter the amount you want to transfer to savings per period")
@@ -746,8 +595,6 @@ def plan_budget_for_year():
                     if not s_dates:
                         print(
                             "Warning: For recurring savings transfers without specific dates, the program will estimate.")
-
-            # Apply holiday adjustment to specific dates
             if s_dates:
                 adjusted_s_dates = []
                 for s_date in s_dates:
@@ -756,11 +603,156 @@ def plan_budget_for_year():
                         adjusted_date -= timedelta(days=1)
                     adjusted_s_dates.append(adjusted_date)
                 s_dates = adjusted_s_dates
-
             current_savings_transfers.append(
                 {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates})
             if not get_yes_no_input("Add another savings transfer?"):
                 break
+
+
+def manage_income(budget_config, end_of_year, holidays):
+    print("\n--- Income Information ---")
+    current_income_amount = budget_config['income']['amount']
+    current_income_freq = budget_config['income']['frequency']
+
+    if current_income_amount > 0:
+        print(f"Current income: ${current_income_amount:.2f} ({current_income_freq})")
+        if get_yes_no_input("Do you want to update your income information?"):
+            budget_config['income']['amount'] = get_float_input("Enter your new income amount after taxes")
+            budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
+            budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+    else:
+        budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
+        budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
+        budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+
+    if budget_config['income']['frequency'] == 'bi-monthly':
+        budget_config['income']['dates'] = get_bi_monthly_pay_dates(datetime.now().date(), end_of_year, holidays)
+    elif budget_config['income']['frequency'] != 'one-time' and budget_config['income']['dates']:
+        budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_of_year,
+                                                               budget_config['income']['frequency'], holidays)
+
+    if not budget_config['income']['dates']:
+        print("Warning: No pay dates were generated for the rest of the year. Please check your input.")
+    else:
+        print("\nCalculated Pay Dates for the rest of the year (adjusted for weekends/holidays):")
+        for date in budget_config['income']['dates']:
+            print(f"- {date.strftime('%Y-%m-%d')}")
+
+
+# --- Modification Menu ---
+
+def modify_budget_menu(budget_config, holidays, end_of_year):
+    while get_yes_no_input("\nDo you want to modify any of your inputs?"):
+        print("\n--- Select a Category to Modify ---")
+        print("1. Income")
+        print("2. Groceries")
+        print("3. Bills")
+        print("4. Streaming Services")
+        print("5. Miscellaneous Monthly Expenses")
+        print("6. One-Time Expenses")
+        print("7. Savings Transfers")
+        print("8. Finish and generate report")
+
+        choice = input("Enter your choice (1-8): ")
+
+        if choice == '1':
+            manage_income(budget_config, end_of_year, holidays)
+        elif choice == '2':
+            manage_groceries(budget_config)
+        elif choice == '3':
+            manage_bills(budget_config, holidays)
+        elif choice == '4':
+            manage_streaming(budget_config)
+        elif choice == '5':
+            manage_misc_monthly(budget_config)
+        elif choice == '6':
+            manage_one_time(budget_config)
+        elif choice == '7':
+            manage_savings(budget_config, holidays)
+        elif choice == '8':
+            print("Finishing modifications.")
+            break
+        else:
+            print("Invalid choice. Please enter a number between 1 and 8.")
+
+
+# --- Main Budget Planning Function ---
+
+def plan_budget_for_year():
+    print("--- Budget Planner for the Rest of the Year ---")
+
+    today = datetime.now().date()
+    end_of_year = datetime(today.year, 12, 31).date()
+
+    budget_config_filename = "my_budget_data.json"
+
+    budget_config = {
+        'initial_debit_balance': 0.0,
+        'initial_savings_balance': 0.0,
+        'income': {
+            'amount': 0.0,
+            'frequency': 'bi-weekly',
+            'dates': []
+        },
+        'expense_categories': {
+            'Groceries': [],
+            'Bills': [],
+            'Streaming Services': [],
+            'Misc Monthly': [],
+            'One-Time': []
+        },
+        'savings_transfers': [],
+        'holiday_filepath': ""
+    }
+
+    if os.path.exists(budget_config_filename):
+        if get_yes_no_input(f"Do you want to load an existing budget from '{budget_config_filename}'?"):
+            loaded_data = load_budget_data(budget_config_filename)
+            if loaded_data:
+                budget_config.update(loaded_data)
+            else:
+                print("Failed to load existing budget. Starting a new budget.")
+        else:
+            print("Starting a new budget.")
+    else:
+        print("No existing budget file found. Starting a new budget.")
+
+    print("\n--- Initial Balances ---")
+    if budget_config['initial_debit_balance'] > 0 or budget_config['initial_savings_balance'] > 0:
+        print(f"Current initial debit balance: ${budget_config['initial_debit_balance']:.2f}")
+        print(f"Current initial savings balance: ${budget_config['initial_savings_balance']:.2f}")
+        if get_yes_no_input("Do you want to update your initial balances?"):
+            budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
+            budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
+    else:
+        budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
+        budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
+
+    print("\n--- Holiday Information ---")
+    if budget_config['holiday_filepath'] and os.path.exists(budget_config['holiday_filepath']):
+        print(f"Current holiday file path: {budget_config['holiday_filepath']}")
+        if get_yes_no_input("Do you want to change the holiday file path?"):
+            budget_config['holiday_filepath'] = input(
+                "Enter the new path to your holiday list file (e.g., holidays.txt): ")
+    else:
+        budget_config['holiday_filepath'] = input("Enter the path to your holiday list file (e.g., holidays.txt): ")
+
+    holidays = load_holidays(budget_config['holiday_filepath'])
+    if holidays:
+        print(f"Loaded {len(holidays)} holidays.")
+    else:
+        print("No holidays loaded or file not found. Payday adjustments will only consider weekends.")
+
+    manage_income(budget_config, end_of_year, holidays)
+    manage_groceries(budget_config)
+    manage_bills(budget_config, holidays)
+    manage_streaming(budget_config)
+    manage_misc_monthly(budget_config)
+    manage_one_time(budget_config)
+    manage_savings(budget_config, holidays)
+
+    # New modification menu after initial setup
+    modify_budget_menu(budget_config, holidays, end_of_year)
 
     # New logic to pre-calculate all recurring dates
     all_expenses_to_process = []
@@ -834,7 +826,6 @@ def plan_budget_for_year():
                     if week_start.month != (week_start - timedelta(days=7)).month or week_start.day <= 7:
                         should_apply_expense_this_week = True
                 elif frequency == 'quarterly':
-                    # Simplified check for quarterly, assumes first quarter is Jan-Mar
                     if week_start.month in [1, 4, 7, 10] and (week_start.day <= 7 or week_start.day >= 25):
                         should_apply_expense_this_week = True
                 elif frequency == 'yearly':
@@ -842,7 +833,6 @@ def plan_budget_for_year():
                         should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
-                # Determine the correct key for the CSV header based on the category
                 if category == 'Bills':
                     key_name = f"Bill: {item_name}"
                 elif category == 'Streaming Services':
@@ -897,8 +887,6 @@ def plan_budget_for_year():
             **weekly_expenses_breakdown
         })
 
-    # The issue was here. The code incorrectly tried to rebuild the budget_config from the all_expenses_to_process and all_savings_to_process.
-    # This block now correctly uses the new 'category' field to rebuild the data.
     new_expense_categories = {
         'Groceries': [],
         'Bills': [],
