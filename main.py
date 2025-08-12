@@ -383,12 +383,14 @@ def manage_bills(budget_config, holidays):
                                             f"Enter the specific date for this one-time {selected_bill['name']} payment"))
                             else:  # Manual dates
                                 print("You've chosen to enter specific dates manually.")
-                                selected_bill['frequency'] = "manual"
-                                selected_bill['dates'] = get_multiple_dates(
+                                new_dates = get_multiple_dates(
                                     f"Enter new specific payment dates for {selected_bill['name']}")
-                                if not selected_bill['dates']:
-                                    print(
-                                        "Warning: No dates were entered. This bill will not be included in the budget.")
+                                if new_dates:
+                                    selected_bill['frequency'] = "manual"
+                                    selected_bill['dates'] = new_dates
+                                    print("Dates updated.")
+                                else:
+                                    print("No dates were entered. Keeping previous dates.")
 
                         if get_yes_no_input(
                                 f"Do you want to update the expiry date for {selected_bill['name']}? (current: {selected_bill['expiry_date'].strftime('%Y-%m-%d') if selected_bill['expiry_date'] else 'None'})"):
@@ -519,12 +521,14 @@ def manage_streaming(budget_config, holidays):
                                             f"Enter the specific date for this one-time {selected_service['name']} payment"))
                             else:  # Manual dates
                                 print("You've chosen to enter specific dates manually.")
-                                selected_service['frequency'] = "manual"
-                                selected_service['dates'] = get_multiple_dates(
+                                new_dates = get_multiple_dates(
                                     f"Enter new specific payment dates for {selected_service['name']}")
-                                if not selected_service['dates']:
-                                    print(
-                                        "Warning: No dates were entered. This service will not be included in the budget.")
+                                if new_dates:
+                                    selected_service['frequency'] = "manual"
+                                    selected_service['dates'] = new_dates
+                                    print("Dates updated.")
+                                else:
+                                    print("No dates were entered. Keeping previous dates.")
 
                         if get_yes_no_input(
                                 f"Do you want to update the expiry date for {selected_service['name']}? (current: {selected_service['expiry_date'].strftime('%Y-%m-%d') if selected_service['expiry_date'] else 'None'})"):
@@ -648,12 +652,14 @@ def manage_misc_monthly(budget_config, holidays):
                                             f"Enter the specific date for this one-time {selected_misc['name']} payment"))
                             else:  # Manual dates
                                 print("You've chosen to enter specific dates manually.")
-                                selected_misc['frequency'] = "manual"
-                                selected_misc['dates'] = get_multiple_dates(
+                                new_dates = get_multiple_dates(
                                     f"Enter new specific payment dates for {selected_misc['name']}")
-                                if not selected_misc['dates']:
-                                    print(
-                                        "Warning: No dates were entered. This expense will not be included in the budget.")
+                                if new_dates:
+                                    selected_misc['frequency'] = "manual"
+                                    selected_misc['dates'] = new_dates
+                                    print("Dates updated.")
+                                else:
+                                    print("No dates were entered. Keeping previous dates.")
 
                         if get_yes_no_input(
                                 f"Do you want to update the expiry date for {selected_misc['name']}? (current: {selected_misc['expiry_date'].strftime('%Y-%m-%d') if selected_misc['expiry_date'] else 'None'})"):
@@ -823,12 +829,13 @@ def manage_savings(budget_config, holidays):
                                             get_date_input(f"Enter the specific date for this one-time transfer"))
                             else:  # Manual dates
                                 print("You've chosen to enter specific dates manually.")
-                                selected_transfer['frequency'] = "manual"
-                                selected_transfer['dates'] = get_multiple_dates(
-                                    "Enter new specific dates for this transfer")
-                                if not selected_transfer['dates']:
-                                    print(
-                                        "Warning: No dates were entered. This transfer will not be included in the budget.")
+                                new_dates = get_multiple_dates("Enter new specific dates for this transfer")
+                                if new_dates:
+                                    selected_transfer['frequency'] = "manual"
+                                    selected_transfer['dates'] = new_dates
+                                    print("Dates updated.")
+                                else:
+                                    print("No dates were entered. Keeping previous dates.")
                         print("Savings transfer updated.")
                     else:
                         print("Invalid transfer number.")
