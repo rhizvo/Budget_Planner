@@ -74,6 +74,32 @@ def get_yes_no_input(prompt):
             print("Invalid input. Please enter 'yes' or 'no'.")
 
 
+# --- New Helper Function for Savings Targets ---
+def get_savings_target_input(prompt, existing_targets):
+    """Helper function to get a valid savings target name."""
+    if not existing_targets:
+        print("You must first create a savings account before adding a transfer schedule.")
+        return None
+    while True:
+        print("Available savings targets:")
+        for i, target in enumerate(existing_targets):
+            print(f"  {i + 1}. {target}")
+        choice = input(prompt + " (Enter the number or name): ")
+        try:
+            # Check if input is a number
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(existing_targets):
+                return existing_targets[choice_idx]
+            else:
+                print("Invalid number.")
+        except ValueError:
+            # Input is not a number, treat as a name
+            if choice in existing_targets:
+                return choice
+            else:
+                print(f"'{choice}' is not a valid savings target.")
+
+
 def load_holidays(filepath):
     """Loads holidays from a TXT file into a set of date objects."""
     holidays_set = set()
@@ -265,6 +291,19 @@ def load_budget_data(filename="my_budget_data.json"):
     try:
         with open(filename, 'r') as f:
             data = json.load(f)
+
+            # --- Backward Compatibility ---
+            # If old 'initial_savings_balance' exists, migrate it
+            if 'initial_savings_balance' in data and 'savings_balances' not in data:
+                print("Migrating old savings format to new multi-target format.")
+                balance = data.pop('initial_savings_balance', 0.0)
+                data['savings_balances'] = {'General Savings': balance}
+                # Assign default target to existing transfers
+                if 'savings_transfers' in data:
+                    for transfer in data['savings_transfers']:
+                        transfer.setdefault('target', 'General Savings')
+            # --- End Backward Compatibility ---
+
             if 'expense_categories' in data:
                 for category, items in data['expense_categories'].items():
                     for item in items:
@@ -765,15 +804,85 @@ def manage_one_time(budget_config):
                 break
 
 
+# --- New Savings Account Management ---
+def manage_savings_accounts(budget_config):
+    """Manages the creation, modification, and deletion of named savings accounts."""
+    print("\n--- Manage Savings Accounts & Balances ---")
+    savings_accounts = budget_config.get('savings_balances', {})
+
+    while True:
+        if not savings_accounts:
+            print("You don't have any savings accounts set up yet.")
+            if get_yes_no_input("Do you want to add one?"):
+                name = input("Enter the name for your new savings account (e.g., House Fund): ")
+                balance = get_float_input(f"Enter the current balance for '{name}'")
+                if name and balance is not None:
+                    savings_accounts[name] = balance
+                    print(f"Savings account '{name}' added with a balance of ${balance:.2f}.")
+                else:
+                    print("Invalid input. Account not created.")
+            else:
+                break
+        else:
+            print("Current Savings Accounts:")
+            accounts_list = list(savings_accounts.items())
+            for i, (name, balance) in enumerate(accounts_list):
+                print(f"  {i + 1}. {name}: ${balance:.2f}")
+
+            if get_yes_no_input("\nDo you want to modify your savings accounts?"):
+                try:
+                    choice_str = input(
+                        "Enter the number of the account to modify/remove, enter 'add' for a new one, or 'done' to finish: ").lower()
+                    if choice_str == 'done': break
+                    if choice_str == 'add':
+                        name = input("Enter the name for your new savings account: ")
+                        if name in savings_accounts:
+                            print(f"An account with the name '{name}' already exists.")
+                            continue
+                        balance = get_float_input(f"Enter the current balance for '{name}'")
+                        if name and balance is not None:
+                            savings_accounts[name] = balance
+                            print(f"Account '{name}' added.")
+                        continue
+
+                    idx = int(choice_str) - 1
+                    if 0 <= idx < len(accounts_list):
+                        old_name, old_balance = accounts_list[idx]
+                        if get_yes_no_input(
+                                f"Do you want to remove the '{old_name}' account? (This will also remove associated transfer schedules)"):
+                            # Cascade delete: remove transfers associated with this account
+                            budget_config['savings_transfers'] = [t for t in budget_config['savings_transfers'] if
+                                                                  t.get('target') != old_name]
+                            del savings_accounts[old_name]
+                            print(f"Account '{old_name}' and its transfers have been removed.")
+                        else:
+                            new_balance = get_float_input(
+                                f"Enter new balance for '{old_name}' (or press Enter to keep ${old_balance:.2f})")
+                            if new_balance is not None:
+                                savings_accounts[old_name] = new_balance
+                                print(f"Balance for '{old_name}' updated.")
+                    else:
+                        print("Invalid number.")
+                except ValueError:
+                    print("Invalid input.")
+            else:
+                break
+    budget_config['savings_balances'] = savings_accounts
+
+
+# --- Modified Savings Transfer Management ---
 def manage_savings(budget_config, holidays):
     print("\n--- Manage Savings Transfers ---")
     current_savings_transfers = budget_config['savings_transfers']
+    savings_targets = list(budget_config.get('savings_balances', {}).keys())
+
     if current_savings_transfers:
         if get_yes_no_input("Do you want to modify or remove an existing savings transfer?"):
             while True:
                 print("Existing Savings Transfers:")
                 for i, transfer in enumerate(current_savings_transfers):
-                    print(f"  {i + 1}. ${transfer['amount']:.2f} ({transfer['frequency']})")
+                    print(
+                        f"  {i + 1}. ${transfer['amount']:.2f} ({transfer['frequency']}) to '{transfer.get('target', 'N/A')}'")
                 try:
                     choice = input("Enter the number of the transfer to modify/remove, or 'done' to finish: ").lower()
                     if choice == 'done': break
@@ -792,6 +901,12 @@ def manage_savings(budget_config, holidays):
                             f"Enter new amount for transfer (or press Enter to keep '${selected_transfer['amount']:.2f}'): ")
                         if new_amount is not None:
                             selected_transfer['amount'] = new_amount
+
+                        if get_yes_no_input("Do you want to change the savings target for this transfer?"):
+                            new_target = get_savings_target_input("Choose the new target account", savings_targets)
+                            if new_target:
+                                selected_transfer['target'] = new_target
+                                print(f"Target updated to '{new_target}'.")
 
                         if get_yes_no_input(
                                 f"Do you want to update the payment schedule for this transfer? (Current: {selected_transfer['frequency']} on {[d.strftime('%Y-%m-%d') for d in selected_transfer['dates']] if selected_transfer['dates'] else 'no specific dates'})"):
@@ -829,35 +944,67 @@ def manage_savings(budget_config, holidays):
                         print("Invalid transfer number.")
                 except ValueError:
                     print("Invalid input. Please enter a number or 'done'.")
-    if get_yes_no_input("Do you want to add a new savings transfer?"):
-        while True:
-            savings_amount = get_float_input("Enter the amount you want to transfer to savings per period")
 
-            savings_frequency = None
-            s_dates = []
+    if get_yes_no_input("Do you want to add a new savings transfer schedule?"):
+        if not savings_targets:
+            print("Error: You must create a savings account first in the 'Manage Savings Accounts' menu.")
+        else:
+            while True:
+                savings_amount = get_float_input("Enter the amount you want to transfer to savings per period")
+                target_account = get_savings_target_input("Which savings account is this transfer for?",
+                                                          savings_targets)
 
-            if get_yes_no_input("Do you want to set a periodic schedule?"):
-                savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
-                if savings_frequency == 'bi-monthly':
-                    start_date = get_date_input("Enter the start date for this bi-monthly transfer")
-                    s_dates = calculate_bi_monthly_dates_every_two_months(start_date,
-                                                                          datetime(datetime.now().year, 12, 31).date(),
-                                                                          holidays)
-                elif savings_frequency == "one-time":
-                    s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
-                else:  # Handles weekly, bi-weekly, monthly, etc.
-                    start_date = get_date_input("Enter the start date for this transfer schedule")
-                    s_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
-                                                  savings_frequency, holidays)
-            else:
-                print("You've chosen to enter specific dates manually.")
-                savings_frequency = "manual"
-                s_dates = get_multiple_dates("Enter a savings transfer date")
+                if savings_amount is None or target_account is None:
+                    print("Transfer creation cancelled.")
+                    break
 
-            current_savings_transfers.append(
-                {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates})
-            if not get_yes_no_input("Add another savings transfer?"):
-                break
+                savings_frequency = None
+                s_dates = []
+                schedule_created_successfully = False
+
+                # --- START: MODIFIED LOGIC ---
+                while True: # Loop to ensure a valid schedule is created or cancelled
+                    if get_yes_no_input("Do you want to set a periodic schedule?"):
+                        savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
+                        if savings_frequency == 'bi-monthly':
+                            start_date = get_date_input("Enter the start date for this bi-monthly transfer")
+                            s_dates = calculate_bi_monthly_dates_every_two_months(start_date,
+                                                                                  datetime(datetime.now().year, 12, 31).date(),
+                                                                                  holidays)
+                        elif savings_frequency == "one-time":
+                            s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
+                        else:  # Handles weekly, bi-weekly, monthly, etc.
+                            start_date = get_date_input("Enter the start date for this transfer schedule")
+                            s_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
+                                                          savings_frequency, holidays)
+                        schedule_created_successfully = True
+                        break # Exit the schedule creation loop
+                    else:
+                        print("You've chosen to enter specific dates manually.")
+                        savings_frequency = "manual"
+                        s_dates = get_multiple_dates("Enter a savings transfer date")
+                        if s_dates:
+                            schedule_created_successfully = True
+                            break # Exit loop, user entered at least one date
+                        else:
+                            print("\nError: You must enter at least one date for a manual transfer.")
+                            if get_yes_no_input("Do you want to try again? (Answering 'no' will cancel this transfer)"):
+                                continue # Loop back to "Enter a savings transfer date"
+                            else:
+                                schedule_created_successfully = False
+                                break # Exit schedule creation loop, cancelling the process
+                # --- END: MODIFIED LOGIC ---
+
+                if schedule_created_successfully:
+                    current_savings_transfers.append(
+                        {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates,
+                         'target': target_account})
+                    print(f"Transfer of ${savings_amount:.2f} to '{target_account}' added.")
+                else:
+                    print("Transfer creation cancelled.")
+
+                if not get_yes_no_input("Add another savings transfer schedule?"):
+                    break
 
 
 def manage_income(budget_config, end_of_year, holidays):
@@ -927,10 +1074,11 @@ def modify_budget_menu(budget_config, holidays, end_of_year):
         print("4. Streaming Services")
         print("5. Miscellaneous Monthly Expenses")
         print("6. One-Time Expenses")
-        print("7. Savings Transfers")
-        print("8. Finish and generate report")
+        print("7. Savings Accounts & Balances")  # New menu item
+        print("8. Savings Transfer Schedules")  # Modified menu item
+        print("9. Finish and generate report")  # Updated number
 
-        choice = input("Enter your choice (1-8): ")
+        choice = input("Enter your choice (1-9): ")
 
         if choice == '1':
             manage_income(budget_config, end_of_year, holidays)
@@ -941,17 +1089,18 @@ def modify_budget_menu(budget_config, holidays, end_of_year):
         elif choice == '4':
             manage_streaming(budget_config, holidays)
         elif choice == '5':
-            # FIX: Pass holidays to manage_misc_monthly
             manage_misc_monthly(budget_config, holidays)
         elif choice == '6':
             manage_one_time(budget_config)
         elif choice == '7':
-            manage_savings(budget_config, holidays)
+            manage_savings_accounts(budget_config)  # New function call
         elif choice == '8':
+            manage_savings(budget_config, holidays)  # Old '7'
+        elif choice == '9':
             print("Finishing modifications.")
             break
         else:
-            print("Invalid choice. Please enter a number between 1 and 8.")
+            print("Invalid choice. Please enter a number between 1 and 9.")
 
 
 # --- Main Budget Planning Function ---
@@ -964,9 +1113,10 @@ def plan_budget_for_year():
 
     budget_config_filename = "my_budget_data.json"
 
+    # Modified default config
     budget_config = {
         'initial_debit_balance': 0.0,
-        'initial_savings_balance': 0.0,
+        'savings_balances': {},  # Changed from initial_savings_balance
         'income': {
             'amount': 0.0,
             'frequency': 'bi-weekly',
@@ -995,21 +1145,22 @@ def plan_budget_for_year():
     else:
         print("No existing budget file found. Starting a new budget.")
 
+    # Modified Initial Balances section
     print("\n--- Initial Balances ---")
-    if budget_config['initial_debit_balance'] > 0 or budget_config['initial_savings_balance'] > 0:
-        print(f"Current initial debit balance: ${budget_config['initial_debit_balance']:.2f}")
-        print(f"Current initial savings balance: ${budget_config['initial_savings_balance']:.2f}")
-        if get_yes_no_input("Do you want to update your initial balances?"):
-            budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
-            budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
-    else:
-        budget_config['initial_debit_balance'] = get_float_input("Enter your current debit account balance")
-        budget_config['initial_savings_balance'] = get_float_input("Enter your current savings account balance")
+    current_debit = budget_config.get('initial_debit_balance', 0.0)
+    print(f"Current initial debit balance: ${current_debit:.2f}")
+    if get_yes_no_input("Do you want to update your initial debit balance?"):
+        new_debit = get_float_input("Enter your current debit account balance")
+        if new_debit is not None:
+            budget_config['initial_debit_balance'] = new_debit
+
+    # Manage savings accounts separately
+    manage_savings_accounts(budget_config)
 
     print("\n--- Holiday Information ---")
     if budget_config['holiday_filepath'] and os.path.exists(budget_config['holiday_filepath']):
         print(f"Current holiday file path: {budget_config['holiday_filepath']}")
-        if get_yes_no_input("Do you want to change the holiday file path?"):
+        if get_yes_no_input("Do you want to update the holiday file path?"):
             budget_config['holiday_filepath'] = input(
                 "Enter the new path to your holiday list file (e.g., holidays.txt): ")
     else:
@@ -1021,19 +1172,19 @@ def plan_budget_for_year():
     else:
         print("No holidays loaded or file not found. Payday adjustments will only consider weekends.")
 
+    # Initial Setup calls (Savings management is now split)
     manage_income(budget_config, end_of_year, holidays)
     manage_groceries(budget_config)
     manage_bills(budget_config, holidays)
     manage_streaming(budget_config, holidays)
-    # FIX: Pass holidays to manage_misc_monthly
     manage_misc_monthly(budget_config, holidays)
     manage_one_time(budget_config)
-    manage_savings(budget_config, holidays)
+    manage_savings(budget_config, holidays)  # This now manages the schedules
 
-    # New modification menu after initial setup
+    # Modification menu after initial setup
     modify_budget_menu(budget_config, holidays, end_of_year)
 
-    # New logic to pre-calculate all recurring dates
+    # Pre-calculate all recurring dates (no change here)
     all_expenses_to_process = []
     for category_list in budget_config['expense_categories'].values():
         for item in category_list:
@@ -1048,7 +1199,6 @@ def plan_budget_for_year():
             transfer['dates'] = get_recurring_dates(transfer['dates'][0], end_of_year, transfer['frequency'], holidays)
         all_savings_to_process.append(transfer)
 
-    # New: Pre-calculate all pay dates
     all_income_paydates = budget_config['income']['dates']
 
     start_of_current_week = today - timedelta(days=today.weekday())
@@ -1059,8 +1209,10 @@ def plan_budget_for_year():
         weeks.append(current_week_start)
         current_week_start += timedelta(weeks=1)
 
+    # --- Modified Calculation Logic ---
     financial_data = []
-    cumulative_saved_amount = budget_config['initial_savings_balance']
+    # Initialize cumulative savings from the named accounts
+    cumulative_savings_by_target = defaultdict(float, budget_config.get('savings_balances', {}))
     running_balance = budget_config['initial_debit_balance']
 
     for week_start in weeks:
@@ -1070,9 +1222,9 @@ def plan_budget_for_year():
         weekly_income = 0.0
         weekly_expenses_breakdown = defaultdict(float)
         weekly_total_expenses = 0.0
-        weekly_savings_transfer = 0.0
+        weekly_total_savings = 0.0
+        weekly_savings_by_target = defaultdict(float)  # Track weekly savings per target
 
-        # New: Use pre-calculated paydates to check for income
         for pay_date in all_income_paydates:
             if week_start <= pay_date <= week_end:
                 weekly_income += budget_config['income']['amount']
@@ -1098,21 +1250,6 @@ def plan_budget_for_year():
                         if week_start <= expense_date <= week_end:
                             should_apply_expense_this_week = True
                             break
-                elif frequency == 'bi-weekly':
-                    if (week_start - start_of_current_week).days // 7 % 2 == 0:
-                        should_apply_expense_this_week = True
-                elif frequency == 'monthly':
-                    if week_start.month != (week_start - timedelta(days=7)).month or week_start.day <= 7:
-                        should_apply_expense_this_week = True
-                elif frequency == 'quarterly':
-                    if week_start.month in [1, 4, 7, 10] and (week_start.day <= 7 or week_start.day >= 25):
-                        should_apply_expense_this_week = True
-                elif frequency == 'yearly':
-                    if week_start.month == 1 and week_start.day <= 7:
-                        should_apply_expense_this_week = True
-                elif frequency == 'bi-monthly':
-                    if (week_start.month - today.month) % 2 == 0 and week_start.day <= 7:
-                        should_apply_expense_this_week = True
 
             if should_apply_expense_this_week:
                 if category == 'Bills':
@@ -1129,10 +1266,14 @@ def plan_budget_for_year():
                 weekly_expenses_breakdown[key_name] += amount
                 weekly_total_expenses += amount
 
+        # Modified savings transfer logic
         for s_transfer in all_savings_to_process:
             s_amount = s_transfer['amount']
             s_frequency = s_transfer['frequency']
             s_dates = s_transfer['dates']
+            s_target = s_transfer.get('target')  # Get the target name
+
+            if not s_target: continue  # Skip if for some reason a transfer has no target
 
             should_apply_savings_this_week = False
 
@@ -1144,37 +1285,37 @@ def plan_budget_for_year():
                         if week_start <= s_date <= week_end:
                             should_apply_savings_this_week = True
                             break
-                elif s_frequency == 'bi-weekly':
-                    if (week_start - start_of_current_week).days // 7 % 2 == 0:
-                        should_apply_savings_this_week = True
-                elif s_frequency == 'monthly':
-                    if week_start.month != (week_start - timedelta(days=7)).month or week_start.day <= 7:
-                        should_apply_savings_this_week = True
 
             if should_apply_savings_this_week:
-                weekly_savings_transfer += s_amount
+                weekly_savings_by_target[s_target] += s_amount
+                weekly_total_savings += s_amount
 
-        running_balance += weekly_income - weekly_total_expenses - weekly_savings_transfer
-        cumulative_saved_amount += weekly_savings_transfer
+        running_balance += weekly_income - weekly_total_expenses - weekly_total_savings
+        for target, amount in weekly_savings_by_target.items():
+            cumulative_savings_by_target[target] += amount
 
-        financial_data.append({
+        # --- Modified Data for CSV Output ---
+        week_data_row = {
             'Week of Year': week_of_year,
             'Week Start Date': week_start.strftime("%Y-%m-%d"),
             'Week End Date': week_end.strftime("%Y-%m-%d"),
             'Income Received': weekly_income,
             'Total Weekly Expenses': weekly_total_expenses,
-            'Savings Transferred': weekly_savings_transfer,
-            'Saved Amount at End of Week': cumulative_saved_amount,
+            'Total Savings Transferred': weekly_total_savings,
             'Running Balance at End of Week': running_balance,
             **weekly_expenses_breakdown
-        })
+        }
+        # Add dynamic columns for each savings target
+        for target, amount in weekly_savings_by_target.items():
+            week_data_row[f'Savings Transferred ({target})'] = amount
+        for target, cumulative_amount in cumulative_savings_by_target.items():
+            week_data_row[f'Saved Amount at End of Week ({target})'] = cumulative_amount
 
+        financial_data.append(week_data_row)
+
+    # --- Save and Write Report ---
     new_expense_categories = {
-        'Groceries': [],
-        'Bills': [],
-        'Streaming Services': [],
-        'Misc Monthly': [],
-        'One-Time': []
+        'Groceries': [], 'Bills': [], 'Streaming Services': [], 'Misc Monthly': [], 'One-Time': []
     }
 
     for item in all_expenses_to_process:
@@ -1193,22 +1334,21 @@ def plan_budget_for_year():
         for row in financial_data:
             all_keys.update(row.keys())
 
+        # Modified key ordering for the CSV
         ordered_keys_initial = [
-            'Week of Year',
-            'Week Start Date',
-            'Week End Date',
-            'Income Received',
-            'Total Weekly Expenses',
-            'Savings Transferred',
-            'Saved Amount at End of Week',
-            'Running Balance at End of Week'
+            'Week of Year', 'Week Start Date', 'Week End Date', 'Income Received',
+            'Total Weekly Expenses', 'Total Savings Transferred', 'Running Balance at End of Week'
         ]
 
-        other_keys = sorted([k for k in all_keys if k not in ordered_keys_initial])
-        final_keys = ordered_keys_initial + other_keys
+        # Group savings columns together
+        savings_keys = sorted(
+            [k for k in all_keys if 'Saved Amount' in k or 'Savings Transferred' in k and 'Total' not in k])
+        expense_keys = sorted([k for k in all_keys if k not in ordered_keys_initial and k not in savings_keys])
+
+        final_keys = ordered_keys_initial + savings_keys + expense_keys
 
         with open(output_filename, 'w', newline='') as output_file:
-            dict_writer = csv.DictWriter(output_file, fieldnames=final_keys)
+            dict_writer = csv.DictWriter(output_file, fieldnames=final_keys, extrasaction='ignore')
             dict_writer.writeheader()
             dict_writer.writerows(financial_data)
         print(f"\nBudget plan report generated as '{output_filename}'.")
