@@ -833,7 +833,7 @@ def manage_savings_accounts(budget_config):
             if get_yes_no_input("\nDo you want to modify your savings accounts?"):
                 try:
                     choice_str = input(
-                        "Enter the number of the account to modify/remove, 'add' a new one, or 'done': ").lower()
+                        "Enter the number of the account to modify/remove, enter 'add' for a new one, or enter 'done' to finish: ").lower()
                     if choice_str == 'done': break
                     if choice_str == 'add':
                         name = input("Enter the name for your new savings account: ")
@@ -964,13 +964,14 @@ def manage_savings(budget_config, holidays):
                 schedule_created_successfully = False
 
                 # --- START: MODIFIED LOGIC ---
-                while True: # Loop to ensure a valid schedule is created or cancelled
+                while True:  # Loop to ensure a valid schedule is created or cancelled
                     if get_yes_no_input("Do you want to set a periodic schedule?"):
                         savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
                         if savings_frequency == 'bi-monthly':
                             start_date = get_date_input("Enter the start date for this bi-monthly transfer")
                             s_dates = calculate_bi_monthly_dates_every_two_months(start_date,
-                                                                                  datetime(datetime.now().year, 12, 31).date(),
+                                                                                  datetime(datetime.now().year, 12,
+                                                                                           31).date(),
                                                                                   holidays)
                         elif savings_frequency == "one-time":
                             s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
@@ -979,21 +980,21 @@ def manage_savings(budget_config, holidays):
                             s_dates = get_recurring_dates(start_date, datetime(datetime.now().year, 12, 31).date(),
                                                           savings_frequency, holidays)
                         schedule_created_successfully = True
-                        break # Exit the schedule creation loop
+                        break  # Exit the schedule creation loop
                     else:
                         print("You've chosen to enter specific dates manually.")
                         savings_frequency = "manual"
                         s_dates = get_multiple_dates("Enter a savings transfer date")
                         if s_dates:
                             schedule_created_successfully = True
-                            break # Exit loop, user entered at least one date
+                            break  # Exit loop, user entered at least one date
                         else:
                             print("\nError: You must enter at least one date for a manual transfer.")
                             if get_yes_no_input("Do you want to try again? (Answering 'no' will cancel this transfer)"):
-                                continue # Loop back to "Enter a savings transfer date"
+                                continue  # Loop back to "Enter a savings transfer date"
                             else:
                                 schedule_created_successfully = False
-                                break # Exit schedule creation loop, cancelling the process
+                                break  # Exit schedule creation loop, cancelling the process
                 # --- END: MODIFIED LOGIC ---
 
                 if schedule_created_successfully:
@@ -1179,7 +1180,6 @@ def plan_budget_for_year(username):
     else:
         print("No holidays loaded. Payday adjustments will only consider weekends.")
 
-
     # Initial Setup calls
     manage_income(budget_config, end_of_year, holidays)
     manage_groceries(budget_config)
@@ -1333,25 +1333,52 @@ def plan_budget_for_year(username):
     else:
         print("\nNo financial data to generate report. Please ensure you've entered income and expenses.")
 
+
 def main():
     """Main function to handle user selection and start the planner."""
+    print("--- Welcome to the Budget Planner ---")
     while True:
-        username = input("Enter your new username (or type 'quit' to exit): ").lower()
-        if username == 'quit':
+        print("\n[1] Sign In")
+        print("[2] Sign Up")
+        print("[3] Exit")
+        choice = input("Please select an option: ")
+
+        if choice == '1':
+            username = input("Enter your username: ").lower()
+            if not username.strip():
+                print("Username cannot be empty.")
+                continue
+            if os.path.isdir(username):
+                print(f"Welcome back, {username}!")
+                plan_budget_for_year(username)
+            else:
+                print(f"Error: No account found for username '{username}'. Please sign up.")
+                continue
+
+        elif choice == '2':
+            username = input("Enter your new username: ").lower()
+            if not username.strip():
+                print("Username cannot be empty.")
+                continue
+            if os.path.isdir(username):
+                print(f"Error: Username '{username}' already exists. Please sign in.")
+                continue
+
+            try:
+                os.makedirs(username)
+                print(f"Account '{username}' created successfully!")
+                plan_budget_for_year(username)
+            except OSError as e:
+                print(f"Error creating directory for user '{username}': {e}")
+
+        elif choice == '3':
+            print("Goodbye!")
             break
-        if not username.strip():
-            print("Username cannot be empty.")
-            continue
+        else:
+            print("Invalid choice. Please enter 1, 2, or 3.")
 
-        # Create a directory for the user if it doesn't exist
-        try:
-            os.makedirs(username, exist_ok=True)
-            print(f"Welcome, {username}!")
-            plan_budget_for_year(username)
-        except OSError as e:
-            print(f"Error creating directory for user '{username}': {e}")
-
-        if not get_yes_no_input("\nDo you want to switch user or exit? (yes=switch user, no=exit)"):
+        if not get_yes_no_input("\nDo you want to return to the main menu? (yes=return, no=exit)"):
+            print("Goodbye!")
             break
 
 
