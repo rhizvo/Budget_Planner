@@ -4,6 +4,7 @@ from collections import defaultdict
 import calendar
 import os
 import json
+import shutil
 
 
 # --- Helper Functions ---
@@ -254,7 +255,7 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
 
 # --- JSON Save/Load Functions ---
 
-def save_budget_data(data, filename="my_budget_data.json"):
+def save_budget_data(data, filename):
     """Saves the budget configuration data to a JSON file."""
     try:
         serializable_data = data.copy()
@@ -282,7 +283,7 @@ def save_budget_data(data, filename="my_budget_data.json"):
         print(f"Error saving budget data: {e}")
 
 
-def load_budget_data(filename="my_budget_data.json"):
+def load_budget_data(filename):
     """Loads the budget configuration data from a JSON file."""
     if not os.path.exists(filename):
         print(f"No existing budget file found at '{filename}'. Starting with an empty budget.")
@@ -832,7 +833,7 @@ def manage_savings_accounts(budget_config):
             if get_yes_no_input("\nDo you want to modify your savings accounts?"):
                 try:
                     choice_str = input(
-                        "Enter the number of the account to modify/remove, enter 'add' for a new one, or 'done' to finish: ").lower()
+                        "Enter the number of the account to modify/remove, 'add' a new one, or 'done': ").lower()
                     if choice_str == 'done': break
                     if choice_str == 'add':
                         name = input("Enter the name for your new savings account: ")
@@ -1105,36 +1106,32 @@ def modify_budget_menu(budget_config, holidays, end_of_year):
 
 # --- Main Budget Planning Function ---
 
-def plan_budget_for_year():
-    print("--- Budget Planner for the Rest of the Year ---")
+def plan_budget_for_year(username):
+    """Main function to plan budget, now user-specific."""
+    print(f"\n--- Budget Planner for {username} ---")
 
     today = datetime.now().date()
     end_of_year = datetime(today.year, 12, 31).date()
 
-    budget_config_filename = "my_budget_data.json"
+    budget_config_filename = os.path.join(username, "my_budget_data.json")
+    output_filename = os.path.join(username, "budget_plan_rest_of_year.csv")
+    user_holiday_path = os.path.join(username, "holidays.txt")
 
-    # Modified default config
+    # Default config for a new user
     budget_config = {
         'initial_debit_balance': 0.0,
-        'savings_balances': {},  # Changed from initial_savings_balance
-        'income': {
-            'amount': 0.0,
-            'frequency': 'bi-weekly',
-            'dates': []
-        },
+        'savings_balances': {},
+        'income': {'amount': 0.0, 'frequency': 'bi-weekly', 'dates': []},
         'expense_categories': {
-            'Groceries': [],
-            'Bills': [],
-            'Streaming Services': [],
-            'Misc Monthly': [],
-            'One-Time': []
+            'Groceries': [], 'Bills': [], 'Streaming Services': [],
+            'Misc Monthly': [], 'One-Time': []
         },
         'savings_transfers': [],
-        'holiday_filepath': ""
+        'holiday_filepath': user_holiday_path
     }
 
     if os.path.exists(budget_config_filename):
-        if get_yes_no_input(f"Do you want to load an existing budget from '{budget_config_filename}'?"):
+        if get_yes_no_input(f"Do you want to load an existing budget for '{username}'?"):
             loaded_data = load_budget_data(budget_config_filename)
             if loaded_data:
                 budget_config.update(loaded_data)
@@ -1143,7 +1140,7 @@ def plan_budget_for_year():
         else:
             print("Starting a new budget.")
     else:
-        print("No existing budget file found. Starting a new budget.")
+        print(f"No existing budget file found for {username}. Starting a new budget.")
 
     # Modified Initial Balances section
     print("\n--- Initial Balances ---")
@@ -1158,44 +1155,55 @@ def plan_budget_for_year():
     manage_savings_accounts(budget_config)
 
     print("\n--- Holiday Information ---")
-    if budget_config['holiday_filepath'] and os.path.exists(budget_config['holiday_filepath']):
-        print(f"Current holiday file path: {budget_config['holiday_filepath']}")
-        if get_yes_no_input("Do you want to update the holiday file path?"):
-            budget_config['holiday_filepath'] = input(
-                "Enter the new path to your holiday list file (e.g., holidays.txt): ")
-    else:
-        budget_config['holiday_filepath'] = input("Enter the path to your holiday list file (e.g., holidays.txt): ")
+    if not os.path.exists(user_holiday_path):
+        print(f"No holiday file found for {username}.")
+        while True:
+            source_holiday_file = input("Enter the path to a source holiday file to copy (e.g., holidays.txt): ")
+            if os.path.exists(source_holiday_file):
+                try:
+                    shutil.copy(source_holiday_file, user_holiday_path)
+                    print(f"Holiday file copied to your user folder at '{user_holiday_path}'.")
+                    break
+                except Exception as e:
+                    print(f"Error copying file: {e}")
+                    if not get_yes_no_input("Try a different file path?"):
+                        break
+            else:
+                print(f"File not found at '{source_holiday_file}'.")
+                if not get_yes_no_input("Try again?"):
+                    break
 
-    holidays = load_holidays(budget_config['holiday_filepath'])
+    holidays = load_holidays(user_holiday_path)
     if holidays:
-        print(f"Loaded {len(holidays)} holidays.")
+        print(f"Loaded {len(holidays)} holidays from '{user_holiday_path}'.")
     else:
-        print("No holidays loaded or file not found. Payday adjustments will only consider weekends.")
+        print("No holidays loaded. Payday adjustments will only consider weekends.")
 
-    # Initial Setup calls (Savings management is now split)
+
+    # Initial Setup calls
     manage_income(budget_config, end_of_year, holidays)
     manage_groceries(budget_config)
     manage_bills(budget_config, holidays)
     manage_streaming(budget_config, holidays)
     manage_misc_monthly(budget_config, holidays)
     manage_one_time(budget_config)
-    manage_savings(budget_config, holidays)  # This now manages the schedules
+    manage_savings(budget_config, holidays)
 
     # Modification menu after initial setup
     modify_budget_menu(budget_config, holidays, end_of_year)
 
-    # Pre-calculate all recurring dates (no change here)
+    # Pre-calculate all recurring dates
     all_expenses_to_process = []
     for category_list in budget_config['expense_categories'].values():
         for item in category_list:
-            if item['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and item['dates']:
+            if item['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and item.get('dates'):
                 new_dates = get_recurring_dates(item['dates'][0], end_of_year, item['frequency'], holidays)
                 item['dates'] = [d for d in new_dates if item['expiry_date'] is None or d <= item['expiry_date']]
         all_expenses_to_process.extend(category_list)
 
     all_savings_to_process = []
     for transfer in budget_config['savings_transfers']:
-        if transfer['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and transfer['dates']:
+        if transfer['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and transfer.get('dates'):
             transfer['dates'] = get_recurring_dates(transfer['dates'][0], end_of_year, transfer['frequency'], holidays)
         all_savings_to_process.append(transfer)
 
@@ -1209,9 +1217,8 @@ def plan_budget_for_year():
         weeks.append(current_week_start)
         current_week_start += timedelta(weeks=1)
 
-    # --- Modified Calculation Logic ---
+    # --- Calculation Logic ---
     financial_data = []
-    # Initialize cumulative savings from the named accounts
     cumulative_savings_by_target = defaultdict(float, budget_config.get('savings_balances', {}))
     running_balance = budget_config['initial_debit_balance']
 
@@ -1223,7 +1230,7 @@ def plan_budget_for_year():
         weekly_expenses_breakdown = defaultdict(float)
         weekly_total_expenses = 0.0
         weekly_total_savings = 0.0
-        weekly_savings_by_target = defaultdict(float)  # Track weekly savings per target
+        weekly_savings_by_target = defaultdict(float)
 
         for pay_date in all_income_paydates:
             if week_start <= pay_date <= week_end:
@@ -1232,7 +1239,7 @@ def plan_budget_for_year():
         for item in all_expenses_to_process:
             amount = item['amount']
             frequency = item['frequency']
-            item_dates = item['dates']
+            item_dates = item.get('dates', [])
             item_name = item['name']
             expiry_date = item.get('expiry_date')
             category = item.get('category')
@@ -1252,28 +1259,17 @@ def plan_budget_for_year():
                             break
 
             if should_apply_expense_this_week:
-                if category == 'Bills':
-                    key_name = f"Bill: {item_name}"
-                elif category == 'Streaming Services':
-                    key_name = f"Streaming: {item_name}"
-                elif category == 'Misc Monthly':
-                    key_name = f"Misc Monthly: {item_name}"
-                elif category == 'One-Time':
-                    key_name = f"One-Time: {item_name}"
-                else:
-                    key_name = item_name
-
+                key_name = f"{category}: {item_name}" if category else item_name
                 weekly_expenses_breakdown[key_name] += amount
                 weekly_total_expenses += amount
 
-        # Modified savings transfer logic
         for s_transfer in all_savings_to_process:
             s_amount = s_transfer['amount']
             s_frequency = s_transfer['frequency']
-            s_dates = s_transfer['dates']
-            s_target = s_transfer.get('target')  # Get the target name
+            s_dates = s_transfer.get('dates', [])
+            s_target = s_transfer.get('target')
 
-            if not s_target: continue  # Skip if for some reason a transfer has no target
+            if not s_target: continue
 
             should_apply_savings_this_week = False
 
@@ -1294,7 +1290,6 @@ def plan_budget_for_year():
         for target, amount in weekly_savings_by_target.items():
             cumulative_savings_by_target[target] += amount
 
-        # --- Modified Data for CSV Output ---
         week_data_row = {
             'Week of Year': week_of_year,
             'Week Start Date': week_start.strftime("%Y-%m-%d"),
@@ -1305,7 +1300,6 @@ def plan_budget_for_year():
             'Running Balance at End of Week': running_balance,
             **weekly_expenses_breakdown
         }
-        # Add dynamic columns for each savings target
         for target, amount in weekly_savings_by_target.items():
             week_data_row[f'Savings Transferred ({target})'] = amount
         for target, cumulative_amount in cumulative_savings_by_target.items():
@@ -1314,37 +1308,21 @@ def plan_budget_for_year():
         financial_data.append(week_data_row)
 
     # --- Save and Write Report ---
-    new_expense_categories = {
-        'Groceries': [], 'Bills': [], 'Streaming Services': [], 'Misc Monthly': [], 'One-Time': []
-    }
-
-    for item in all_expenses_to_process:
-        category = item.get('category')
-        if category in new_expense_categories:
-            new_expense_categories[category].append(item)
-
-    budget_config['expense_categories'] = new_expense_categories
     budget_config['savings_transfers'] = all_savings_to_process
-
     save_budget_data(budget_config, budget_config_filename)
 
-    output_filename = "budget_plan_rest_of_year.csv"
     if financial_data:
         all_keys = set()
         for row in financial_data:
             all_keys.update(row.keys())
 
-        # Modified key ordering for the CSV
         ordered_keys_initial = [
             'Week of Year', 'Week Start Date', 'Week End Date', 'Income Received',
             'Total Weekly Expenses', 'Total Savings Transferred', 'Running Balance at End of Week'
         ]
 
-        # Group savings columns together
-        savings_keys = sorted(
-            [k for k in all_keys if 'Saved Amount' in k or 'Savings Transferred' in k and 'Total' not in k])
+        savings_keys = sorted([k for k in all_keys if 'Saved Amount' in k or 'Savings Transferred' in k])
         expense_keys = sorted([k for k in all_keys if k not in ordered_keys_initial and k not in savings_keys])
-
         final_keys = ordered_keys_initial + savings_keys + expense_keys
 
         with open(output_filename, 'w', newline='') as output_file:
@@ -1355,6 +1333,27 @@ def plan_budget_for_year():
     else:
         print("\nNo financial data to generate report. Please ensure you've entered income and expenses.")
 
+def main():
+    """Main function to handle user selection and start the planner."""
+    while True:
+        username = input("Enter your new username (or type 'quit' to exit): ").lower()
+        if username == 'quit':
+            break
+        if not username.strip():
+            print("Username cannot be empty.")
+            continue
+
+        # Create a directory for the user if it doesn't exist
+        try:
+            os.makedirs(username, exist_ok=True)
+            print(f"Welcome, {username}!")
+            plan_budget_for_year(username)
+        except OSError as e:
+            print(f"Error creating directory for user '{username}': {e}")
+
+        if not get_yes_no_input("\nDo you want to switch user or exit? (yes=switch user, no=exit)"):
+            break
+
 
 if __name__ == "__main__":
-    plan_budget_for_year()
+    main()
