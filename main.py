@@ -5,6 +5,7 @@ import calendar
 import os
 import json
 import shutil
+import copy
 
 
 # --- Helper Functions ---
@@ -258,7 +259,8 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
 def save_budget_data(data, filename):
     """Saves the budget configuration data to a JSON file."""
     try:
-        serializable_data = data.copy()
+        # BUG FIX: Use deepcopy to avoid modifying the live budget_config object
+        serializable_data = copy.deepcopy(data)
         if 'expense_categories' in serializable_data:
             for category, items in serializable_data['expense_categories'].items():
                 for item in items:
