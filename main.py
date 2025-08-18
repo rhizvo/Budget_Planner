@@ -1345,8 +1345,10 @@ def plan_budget_for_year(username):
         elif choice == '2':
             manage_categories_menu(budget_config, end_of_year, holidays)
         elif choice == '3':
-            save_budget_data(budget_config, budget_config_filename)
+            # BUG FIX: Generate the report first, while dates are still datetime objects.
             generate_report(budget_config, username, end_of_year, holidays)
+            # Then, save the configuration, which converts dates to strings for JSON.
+            save_budget_data(budget_config, budget_config_filename)
         elif choice == '4':
             # Ask to save before exiting this user's session
             if get_yes_no_input("Do you want to save any changes before exiting?"):
