@@ -833,7 +833,7 @@ def manage_savings_accounts(budget_config):
             if get_yes_no_input("\nDo you want to modify your savings accounts?"):
                 try:
                     choice_str = input(
-                        "Enter the number of the account to modify/remove, enter 'add' for a new one, or enter 'done' to finish: ").lower()
+                        "Enter the number of the account to modify/remove, enter 'add' to make a new one, or 'done' to finish: ").lower()
                     if choice_str == 'done': break
                     if choice_str == 'add':
                         name = input("Enter the name for your new savings account: ")
@@ -1065,85 +1065,14 @@ def manage_income(budget_config, end_of_year, holidays):
             print(f"- {date.strftime('%Y-%m-%d')}")
 
 
-# --- Modification Menu ---
+# --- NEW: Menu and Workflow Functions ---
 
-def modify_budget_menu(budget_config, holidays, end_of_year):
-    while get_yes_no_input("\nDo you want to modify any of your inputs?"):
-        print("\n--- Select a Category to Modify ---")
-        print("1. Income")
-        print("2. Groceries")
-        print("3. Bills")
-        print("4. Streaming Services")
-        print("5. Miscellaneous Monthly Expenses")
-        print("6. One-Time Expenses")
-        print("7. Savings Accounts & Balances")  # New menu item
-        print("8. Savings Transfer Schedules")  # Modified menu item
-        print("9. Finish and generate report")  # Updated number
+def run_guided_setup(budget_config, end_of_year, holidays):
+    """Runs the user through all management functions sequentially."""
+    print("\n--- Guided Budget Setup ---")
+    print("Let's walk through all the sections of your budget.")
 
-        choice = input("Enter your choice (1-9): ")
-
-        if choice == '1':
-            manage_income(budget_config, end_of_year, holidays)
-        elif choice == '2':
-            manage_groceries(budget_config)
-        elif choice == '3':
-            manage_bills(budget_config, holidays)
-        elif choice == '4':
-            manage_streaming(budget_config, holidays)
-        elif choice == '5':
-            manage_misc_monthly(budget_config, holidays)
-        elif choice == '6':
-            manage_one_time(budget_config)
-        elif choice == '7':
-            manage_savings_accounts(budget_config)  # New function call
-        elif choice == '8':
-            manage_savings(budget_config, holidays)  # Old '7'
-        elif choice == '9':
-            print("Finishing modifications.")
-            break
-        else:
-            print("Invalid choice. Please enter a number between 1 and 9.")
-
-
-# --- Main Budget Planning Function ---
-
-def plan_budget_for_year(username):
-    """Main function to plan budget, now user-specific."""
-    print(f"\n--- Budget Planner for {username} ---")
-
-    today = datetime.now().date()
-    end_of_year = datetime(today.year, 12, 31).date()
-
-    budget_config_filename = os.path.join(username, "my_budget_data.json")
-    output_filename = os.path.join(username, "budget_plan_rest_of_year.csv")
-    user_holiday_path = os.path.join(username, "holidays.txt")
-
-    # Default config for a new user
-    budget_config = {
-        'initial_debit_balance': 0.0,
-        'savings_balances': {},
-        'income': {'amount': 0.0, 'frequency': 'bi-weekly', 'dates': []},
-        'expense_categories': {
-            'Groceries': [], 'Bills': [], 'Streaming Services': [],
-            'Misc Monthly': [], 'One-Time': []
-        },
-        'savings_transfers': [],
-        'holiday_filepath': user_holiday_path
-    }
-
-    if os.path.exists(budget_config_filename):
-        if get_yes_no_input(f"Do you want to load an existing budget for '{username}'?"):
-            loaded_data = load_budget_data(budget_config_filename)
-            if loaded_data:
-                budget_config.update(loaded_data)
-            else:
-                print("Failed to load existing budget. Starting a new budget.")
-        else:
-            print("Starting a new budget.")
-    else:
-        print(f"No existing budget file found for {username}. Starting a new budget.")
-
-    # Modified Initial Balances section
+    # Initial Balances and Accounts
     print("\n--- Initial Balances ---")
     current_debit = budget_config.get('initial_debit_balance', 0.0)
     print(f"Current initial debit balance: ${current_debit:.2f}")
@@ -1152,35 +1081,9 @@ def plan_budget_for_year(username):
         if new_debit is not None:
             budget_config['initial_debit_balance'] = new_debit
 
-    # Manage savings accounts separately
     manage_savings_accounts(budget_config)
 
-    print("\n--- Holiday Information ---")
-    if not os.path.exists(user_holiday_path):
-        print(f"No holiday file found for {username}.")
-        while True:
-            source_holiday_file = input("Enter the path to a source holiday file to copy (e.g., holidays.txt): ")
-            if os.path.exists(source_holiday_file):
-                try:
-                    shutil.copy(source_holiday_file, user_holiday_path)
-                    print(f"Holiday file copied to your user folder at '{user_holiday_path}'.")
-                    break
-                except Exception as e:
-                    print(f"Error copying file: {e}")
-                    if not get_yes_no_input("Try a different file path?"):
-                        break
-            else:
-                print(f"File not found at '{source_holiday_file}'.")
-                if not get_yes_no_input("Try again?"):
-                    break
-
-    holidays = load_holidays(user_holiday_path)
-    if holidays:
-        print(f"Loaded {len(holidays)} holidays from '{user_holiday_path}'.")
-    else:
-        print("No holidays loaded. Payday adjustments will only consider weekends.")
-
-    # Initial Setup calls
+    # All other categories
     manage_income(budget_config, end_of_year, holidays)
     manage_groceries(budget_config)
     manage_bills(budget_config, holidays)
@@ -1189,38 +1092,86 @@ def plan_budget_for_year(username):
     manage_one_time(budget_config)
     manage_savings(budget_config, holidays)
 
-    # Modification menu after initial setup
-    modify_budget_menu(budget_config, holidays, end_of_year)
+    print("\n--- Guided Setup Complete ---")
+
+
+def manage_categories_menu(budget_config, end_of_year, holidays):
+    """Shows a menu to manage specific budget categories."""
+    while True:
+        print("\n--- Manage Specific Categories ---")
+        print("1. Initial Debit & Savings Balances")
+        print("2. Income")
+        print("3. Groceries")
+        print("4. Bills")
+        print("5. Streaming Services")
+        print("6. Miscellaneous Monthly Expenses")
+        print("7. One-Time Expenses")
+        print("8. Savings Transfer Schedules")
+        print("9. Return to Previous Menu")
+
+        choice = input("Enter your choice (1-9): ")
+
+        if choice == '1':
+            manage_savings_accounts(budget_config)
+        elif choice == '2':
+            manage_income(budget_config, end_of_year, holidays)
+        elif choice == '3':
+            manage_groceries(budget_config)
+        elif choice == '4':
+            manage_bills(budget_config, holidays)
+        elif choice == '5':
+            manage_streaming(budget_config, holidays)
+        elif choice == '6':
+            manage_misc_monthly(budget_config, holidays)
+        elif choice == '7':
+            manage_one_time(budget_config)
+        elif choice == '8':
+            manage_savings(budget_config, holidays)
+        elif choice == '9':
+            print("Returning to the previous menu.")
+            break
+        else:
+            print("Invalid choice. Please enter a number between 1 and 9.")
+
+
+def generate_report(budget_config, username, end_of_year, holidays):
+    """Calculates the budget and writes the final CSV report."""
+    print("\n--- Generating Budget Report ---")
+
+    output_filename = os.path.join(username, "budget_plan_rest_of_year.csv")
+    today = datetime.now().date()
 
     # Pre-calculate all recurring dates
     all_expenses_to_process = []
     for category_list in budget_config['expense_categories'].values():
         for item in category_list:
-            if item['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and item.get('dates'):
+            if item['frequency'] not in ['weekly', 'one-time', 'manual'] and item.get('dates'):
                 new_dates = get_recurring_dates(item['dates'][0], end_of_year, item['frequency'], holidays)
-                item['dates'] = [d for d in new_dates if item['expiry_date'] is None or d <= item['expiry_date']]
+                item['dates'] = [d for d in new_dates if item.get('expiry_date') is None or d <= item['expiry_date']]
         all_expenses_to_process.extend(category_list)
 
     all_savings_to_process = []
     for transfer in budget_config['savings_transfers']:
-        if transfer['frequency'] not in ['weekly', 'one-time', 'bi-monthly', 'manual'] and transfer.get('dates'):
+        if transfer['frequency'] not in ['weekly', 'one-time', 'manual'] and transfer.get('dates'):
             transfer['dates'] = get_recurring_dates(transfer['dates'][0], end_of_year, transfer['frequency'], holidays)
         all_savings_to_process.append(transfer)
 
-    all_income_paydates = budget_config['income']['dates']
+    all_income_paydates = budget_config['income'].get('dates', [])
+    if budget_config['income']['frequency'] not in ['one-time', 'manual'] and all_income_paydates:
+        all_income_paydates = get_recurring_dates(all_income_paydates[0], end_of_year,
+                                                  budget_config['income']['frequency'], holidays)
 
     start_of_current_week = today - timedelta(days=today.weekday())
-
     weeks = []
     current_week_start = start_of_current_week
     while current_week_start <= end_of_year:
         weeks.append(current_week_start)
         current_week_start += timedelta(weeks=1)
 
-    # --- Calculation Logic ---
+    # Calculation Logic
     financial_data = []
     cumulative_savings_by_target = defaultdict(float, budget_config.get('savings_balances', {}))
-    running_balance = budget_config['initial_debit_balance']
+    running_balance = budget_config.get('initial_debit_balance', 0.0)
 
     for week_start in weeks:
         week_end = week_start + timedelta(days=6)
@@ -1234,29 +1185,26 @@ def plan_budget_for_year(username):
 
         for pay_date in all_income_paydates:
             if week_start <= pay_date <= week_end:
-                weekly_income += budget_config['income']['amount']
+                weekly_income += budget_config['income'].get('amount', 0.0)
 
         for item in all_expenses_to_process:
-            amount = item['amount']
-            frequency = item['frequency']
+            amount = item.get('amount', 0.0)
+            frequency = item.get('frequency')
             item_dates = item.get('dates', [])
-            item_name = item['name']
+            item_name = item.get('name')
             expiry_date = item.get('expiry_date')
             category = item.get('category')
 
             should_apply_expense_this_week = False
-
-            if expiry_date is not None and week_start > expiry_date:
+            if expiry_date and week_start > expiry_date:
                 continue
-
             if frequency == 'weekly':
                 should_apply_expense_this_week = True
-            elif frequency in ['bi-weekly', 'monthly', 'bi-monthly', 'quarterly', 'yearly', 'one-time', 'manual']:
-                if item_dates:
-                    for expense_date in item_dates:
-                        if week_start <= expense_date <= week_end:
-                            should_apply_expense_this_week = True
-                            break
+            elif item_dates:
+                for expense_date in item_dates:
+                    if week_start <= expense_date <= week_end:
+                        should_apply_expense_this_week = True
+                        break
 
             if should_apply_expense_this_week:
                 key_name = f"{category}: {item_name}" if category else item_name
@@ -1264,23 +1212,21 @@ def plan_budget_for_year(username):
                 weekly_total_expenses += amount
 
         for s_transfer in all_savings_to_process:
-            s_amount = s_transfer['amount']
-            s_frequency = s_transfer['frequency']
+            s_amount = s_transfer.get('amount', 0.0)
+            s_frequency = s_transfer.get('frequency')
             s_dates = s_transfer.get('dates', [])
             s_target = s_transfer.get('target')
 
             if not s_target: continue
 
             should_apply_savings_this_week = False
-
             if s_frequency == 'weekly':
                 should_apply_savings_this_week = True
-            elif s_frequency in ['bi-weekly', 'monthly', 'one-time', 'bi-monthly', 'manual']:
-                if s_dates:
-                    for s_date in s_dates:
-                        if week_start <= s_date <= week_end:
-                            should_apply_savings_this_week = True
-                            break
+            elif s_dates:
+                for s_date in s_dates:
+                    if week_start <= s_date <= week_end:
+                        should_apply_savings_this_week = True
+                        break
 
             if should_apply_savings_this_week:
                 weekly_savings_by_target[s_target] += s_amount
@@ -1304,13 +1250,9 @@ def plan_budget_for_year(username):
             week_data_row[f'Savings Transferred ({target})'] = amount
         for target, cumulative_amount in cumulative_savings_by_target.items():
             week_data_row[f'Saved Amount at End of Week ({target})'] = cumulative_amount
-
         financial_data.append(week_data_row)
 
-    # --- Save and Write Report ---
-    budget_config['savings_transfers'] = all_savings_to_process
-    save_budget_data(budget_config, budget_config_filename)
-
+    # Save and Write Report
     if financial_data:
         all_keys = set()
         for row in financial_data:
@@ -1320,7 +1262,6 @@ def plan_budget_for_year(username):
             'Week of Year', 'Week Start Date', 'Week End Date', 'Income Received',
             'Total Weekly Expenses', 'Total Savings Transferred', 'Running Balance at End of Week'
         ]
-
         savings_keys = sorted([k for k in all_keys if 'Saved Amount' in k or 'Savings Transferred' in k])
         expense_keys = sorted([k for k in all_keys if k not in ordered_keys_initial and k not in savings_keys])
         final_keys = ordered_keys_initial + savings_keys + expense_keys
@@ -1331,7 +1272,89 @@ def plan_budget_for_year(username):
             dict_writer.writerows(financial_data)
         print(f"\nBudget plan report generated as '{output_filename}'.")
     else:
-        print("\nNo financial data to generate report. Please ensure you've entered income and expenses.")
+        print("\nNo financial data to generate report.")
+
+
+# --- Main Budget Planning Function ---
+
+def plan_budget_for_year(username):
+    """Main function to plan budget, now user-specific."""
+    print(f"\n--- Budget Planner for {username} ---")
+
+    today = datetime.now().date()
+    end_of_year = datetime(today.year, 12, 31).date()
+
+    budget_config_filename = os.path.join(username, "my_budget_data.json")
+    user_holiday_path = os.path.join(username, "holidays.txt")
+
+    # Default config for a new user
+    budget_config = {
+        'initial_debit_balance': 0.0,
+        'savings_balances': {},
+        'income': {'amount': 0.0, 'frequency': 'bi-weekly', 'dates': []},
+        'expense_categories': {
+            'Groceries': [], 'Bills': [], 'Streaming Services': [],
+            'Misc Monthly': [], 'One-Time': []
+        },
+        'savings_transfers': [],
+        'holiday_filepath': user_holiday_path
+    }
+
+    # Load existing data or start new
+    loaded_data = load_budget_data(budget_config_filename)
+    if loaded_data:
+        budget_config.update(loaded_data)
+    else:
+        print(f"No existing budget file found for {username}. Starting a new budget setup.")
+
+    # Holiday file setup
+    print("\n--- Holiday Information ---")
+    if not os.path.exists(user_holiday_path):
+        print(f"No holiday file found for {username}.")
+        while True:
+            source_holiday_file = input("Enter the path to a source holiday file to copy (e.g., holidays.txt): ")
+            if os.path.exists(source_holiday_file):
+                try:
+                    shutil.copy(source_holiday_file, user_holiday_path)
+                    print(f"Holiday file copied to your user folder at '{user_holiday_path}'.")
+                    break
+                except Exception as e:
+                    print(f"Error copying file: {e}")
+                    if not get_yes_no_input("Try a different file path?"): break
+            else:
+                print(f"File not found at '{source_holiday_file}'.")
+                if not get_yes_no_input("Try again?"): break
+
+    holidays = load_holidays(user_holiday_path)
+    if holidays:
+        print(f"Loaded {len(holidays)} holidays from '{user_holiday_path}'.")
+
+    # --- NEW: Main Action Loop ---
+    while True:
+        print("\n--- Main Menu ---")
+        print(f"User: {username}")
+        print("1. Guided Budget Setup (Recommended for new users)")
+        print("2. Manage Specific Categories")
+        print("3. Generate Budget Report and Save")
+        print("4. Exit to User Selection")
+
+        choice = input("Select an option: ")
+
+        if choice == '1':
+            run_guided_setup(budget_config, end_of_year, holidays)
+        elif choice == '2':
+            manage_categories_menu(budget_config, end_of_year, holidays)
+        elif choice == '3':
+            save_budget_data(budget_config, budget_config_filename)
+            generate_report(budget_config, username, end_of_year, holidays)
+        elif choice == '4':
+            # Ask to save before exiting this user's session
+            if get_yes_no_input("Do you want to save any changes before exiting?"):
+                save_budget_data(budget_config, budget_config_filename)
+            print(f"Exiting session for {username}.")
+            break
+        else:
+            print("Invalid choice. Please select a valid option.")
 
 
 def main():
@@ -1377,7 +1400,7 @@ def main():
         else:
             print("Invalid choice. Please enter 1, 2, or 3.")
 
-        if not get_yes_no_input("\nDo you want to return to the main menu? (yes=return, no=exit)"):
+        if not get_yes_no_input("\nDo you want to return to the main user menu? (yes=return, no=exit)"):
             print("Goodbye!")
             break
 
