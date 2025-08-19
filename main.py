@@ -207,30 +207,34 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
 def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
     """
     Generates a list of recurring dates based on frequency, adjusting for weekends/holidays.
+    The calculation for the next date is based on the unadjusted date to prevent drift.
     """
     dates = []
     current_date = start_date
     holidays_set = holidays_set if holidays_set is not None else set()
 
     while current_date <= end_date:
+        # Adjust the current theoretical date for weekends/holidays
         adjusted_date = current_date
         while not is_business_day(adjusted_date, holidays_set):
             adjusted_date -= timedelta(days=1)
-        dates.append(adjusted_date)
 
+        # Only add the date if it's on or after today
+        if adjusted_date >= datetime.now().date():
+            dates.append(adjusted_date)
+
+        # Calculate the next theoretical date from the unadjusted current_date
         if frequency == 'weekly':
             current_date += timedelta(weeks=1)
         elif frequency == 'bi-weekly':
             current_date += timedelta(weeks=2)
         elif frequency == 'monthly':
-            # Corrected logic for monthly rollover
             new_month = current_date.month + 1
             new_year = current_date.year
             if new_month > 12:
                 new_month = 1
                 new_year += 1
-            # Adjust day if the new month doesn't have enough days
-            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            day = min(start_date.day, calendar.monthrange(new_year, new_month)[1])
             current_date = datetime(new_year, new_month, day).date()
         elif frequency == 'bi-monthly':
             new_month = current_date.month + 2
@@ -238,24 +242,22 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
             if new_month > 12:
                 new_month -= 12
                 new_year += 1
-            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            day = min(start_date.day, calendar.monthrange(new_year, new_month)[1])
             current_date = datetime(new_year, new_month, day).date()
         elif frequency == 'quarterly':
-            # Corrected logic for quarterly rollover
             new_month = current_date.month + 3
             new_year = current_date.year
             if new_month > 12:
                 new_month -= 12
                 new_year += 1
-            day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
+            day = min(start_date.day, calendar.monthrange(new_year, new_month)[1])
             current_date = datetime(new_year, new_month, day).date()
         elif frequency == 'yearly':
-            current_date = datetime(current_date.year + 1, current_date.month, current_date.day).date()
+            current_date = datetime(current_date.year + 1, start_date.month, start_date.day).date()
         else:
             break
 
-    # Remove dates that are before the current date
-    return sorted([d for d in dates if d >= datetime.now().date()])
+    return sorted(list(set(dates)))
 
 
 # --- JSON Save/Load Functions ---
