@@ -1332,8 +1332,11 @@ def plan_budget_for_year(username):
     print("\n--- Holiday Information ---")
     required_years = range(start_date.year, end_date.year + 1)
     holiday_files_to_load = []
+    holidays_folder = os.path.join(username, 'holidays')
+    os.makedirs(holidays_folder, exist_ok=True)
+
     for year in required_years:
-        user_holiday_path = os.path.join(username, f"holidays_{year}.txt")
+        user_holiday_path = os.path.join(holidays_folder, f"holidays_{year}.txt")
         holiday_files_to_load.append(user_holiday_path)
         if not os.path.exists(user_holiday_path):
             print(f"Holiday file for {year} is missing.")
@@ -1419,6 +1422,7 @@ def main():
 
             try:
                 os.makedirs(username)
+                os.makedirs(os.path.join(username, 'holidays'))
                 print(f"Account '{username}' created successfully!")
                 plan_budget_for_year(username)
             except OSError as e:
