@@ -1199,8 +1199,10 @@ def generate_report(budget_config, username, start_date, end_date, holidays):
             transfer['dates'] = get_recurring_dates(transfer['dates'][0], end_date, transfer['frequency'], holidays)
         all_savings_to_process.append(transfer)
 
+    # BUG FIX: Exclude pre-calculated frequencies from being re-calculated
     all_income_paydates = budget_config['income'].get('dates', [])
-    if budget_config['income']['frequency'] not in ['one-time', 'manual'] and all_income_paydates:
+    if budget_config['income']['frequency'] not in ['one-time', 'manual', 'twice-monthly',
+                                                    'bi-monthly'] and all_income_paydates:
         all_income_paydates = get_recurring_dates(all_income_paydates[0], end_date,
                                                   budget_config['income']['frequency'], holidays)
 
