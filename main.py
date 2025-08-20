@@ -40,18 +40,24 @@ def get_float_input(prompt):
             print("Invalid input. Please enter a number.")
 
 
-def get_frequency_input(prompt):
-    """Helper function to get a valid frequency input."""
+def get_frequency_input(prompt, extra_options=None):
+    """Helper function to get a valid frequency input, with optional extra choices."""
+    valid_options = ["weekly", "bi-weekly", "monthly", "bi-monthly", "quarterly", "yearly", "one-time"]
+    prompt_options = "(weekly, bi-weekly, monthly, bi-monthly, quarterly, yearly, one-time"
+
+    if extra_options:
+        valid_options.extend(extra_options)
+        prompt_options += ", " + ", ".join(extra_options)
+    prompt_options += "): "
+
     while True:
-        freq = input(
-            prompt + " (weekly, bi-weekly (every 2 weeks), monthly, bi-monthly (every 2 months), quarterly, yearly, one-time): ").lower()
+        freq = input(prompt + prompt_options).lower()
         if freq == '':
             return None  # Return None for empty input
-        if freq in ["weekly", "bi-weekly", "monthly", "bi-monthly", "quarterly", "yearly", "one-time"]:
+        if freq in valid_options:
             return freq
         else:
-            print(
-                "Invalid frequency. Please choose from: weekly, bi-weekly, monthly, bi-monthly, quarterly, yearly, one-time.")
+            print("Invalid frequency. Please choose from the available options.")
 
 
 def get_multiple_dates(prompt):
@@ -910,12 +916,21 @@ def manage_savings(budget_config, start_date, end_date, holidays):
 
                         if get_yes_no_input(
                                 f"Do you want to update the payment schedule for this transfer? (Current: {selected_transfer['frequency']} on {[d.strftime('%Y-%m-%d') for d in selected_transfer['dates']] if selected_transfer['dates'] else 'no specific dates'})"):
+
+                            freq_options = []
+                            if budget_config.get('income', {}).get('dates'):
+                                freq_options.append('match payday')
+
                             if get_yes_no_input("Do you want to set a periodic schedule?"):
-                                new_freq = get_frequency_input("How often do you want to transfer to savings?")
+                                new_freq = get_frequency_input("How often do you want to transfer to savings?",
+                                                               extra_options=freq_options)
                                 if new_freq:
                                     selected_transfer['frequency'] = new_freq
                                     selected_transfer['dates'] = []
-                                    if new_freq == 'bi-monthly':
+                                    if new_freq == 'match payday':
+                                        selected_transfer['dates'] = budget_config['income']['dates']
+                                        print("Savings transfer dates now match your income dates.")
+                                    elif new_freq == 'bi-monthly':
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this bi-monthly transfer")
                                         selected_transfer['dates'] = calculate_bi_monthly_dates_every_two_months(
@@ -961,35 +976,41 @@ def manage_savings(budget_config, start_date, end_date, holidays):
                 s_dates = []
                 schedule_created_successfully = False
 
-                # --- START: MODIFIED LOGIC ---
-                while True:  # Loop to ensure a valid schedule is created or cancelled
+                freq_options = []
+                if budget_config.get('income', {}).get('dates'):
+                    freq_options.append('match payday')
+
+                while True:
                     if get_yes_no_input("Do you want to set a periodic schedule?"):
-                        savings_frequency = get_frequency_input("How often do you want to transfer to savings?")
-                        if savings_frequency == 'bi-monthly':
+                        savings_frequency = get_frequency_input("How often do you want to transfer to savings?",
+                                                                extra_options=freq_options)
+                        if savings_frequency == 'match payday':
+                            s_dates = budget_config['income']['dates']
+                            print("Savings transfer dates now match your income dates.")
+                        elif savings_frequency == 'bi-monthly':
                             start_date_input = get_date_input("Enter the start date for this bi-monthly transfer")
                             s_dates = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date, holidays)
                         elif savings_frequency == "one-time":
                             s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
-                        else:  # Handles weekly, bi-weekly, monthly, etc.
+                        else:
                             start_date_input = get_date_input("Enter the start date for this transfer schedule")
                             s_dates = get_recurring_dates(start_date_input, end_date, savings_frequency, holidays)
                         schedule_created_successfully = True
-                        break  # Exit the schedule creation loop
+                        break
                     else:
                         print("You've chosen to enter specific dates manually.")
                         savings_frequency = "manual"
                         s_dates = get_multiple_dates("Enter a savings transfer date")
                         if s_dates:
                             schedule_created_successfully = True
-                            break  # Exit loop, user entered at least one date
+                            break
                         else:
                             print("\nError: You must enter at least one date for a manual transfer.")
                             if get_yes_no_input("Do you want to try again? (Answering 'no' will cancel this transfer)"):
-                                continue  # Loop back to "Enter a savings transfer date"
+                                continue
                             else:
                                 schedule_created_successfully = False
-                                break  # Exit schedule creation loop, cancelling the process
-                # --- END: MODIFIED LOGIC ---
+                                break
 
                 if schedule_created_successfully:
                     current_savings_transfers.append(
@@ -1017,41 +1038,41 @@ def manage_income(budget_config, start_date, end_date, holidays):
                 budget_config['income']['amount'] = new_amount
 
             new_freq = get_frequency_input(
-                f"How often do you receive this income? (or press Enter to keep '{current_income_freq}'): ")
+                f"How often do you receive this income?", extra_options=['twice-monthly'])
             if new_freq is not None:
                 budget_config['income']['frequency'] = new_freq
 
-            if new_freq == 'bi-monthly':
+            if new_freq == 'twice-monthly':
+                budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
+            elif new_freq == 'bi-monthly':
                 if get_yes_no_input("Do you want to update the start date for this bi-monthly income?"):
                     start_date_input = get_date_input("Enter the start date for this bi-monthly income")
                     budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date_input,
                                                                                                    end_date, holidays)
-            elif new_freq == 'twice-monthly':
-                budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
             elif get_yes_no_input("Do you want to update the date of your next upcoming paycheck?"):
                 budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
     else:
         budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
-        budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?")
-        if budget_config['income']['frequency'] == 'bi-monthly':
+        budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?",
+                                                                   extra_options=['twice-monthly'])
+        if budget_config['income']['frequency'] == 'twice-monthly':
+            budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
+        elif budget_config['income']['frequency'] == 'bi-monthly':
             start_date_input = get_date_input("Enter the start date for this bi-monthly income")
             budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date,
                                                                                            holidays)
-        elif budget_config['income']['frequency'] == 'twice-monthly':
-            budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
         else:
             budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
 
-    if budget_config['income']['frequency'] != 'one-time' and budget_config['income']['frequency'] not in ['bi-monthly',
-                                                                                                           'twice-monthly'] and \
+    if budget_config['income']['frequency'] not in ['one-time', 'bi-monthly', 'twice-monthly'] and \
             budget_config['income']['dates']:
         budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_date,
                                                                budget_config['income']['frequency'], holidays)
 
     if not budget_config['income']['dates']:
-        print("Warning: No pay dates were generated for the rest of the year. Please check your input.")
+        print("Warning: No pay dates were generated for the budget period. Please check your input.")
     else:
-        print("\nCalculated Pay Dates for the rest of the year (adjusted for weekends/holidays):")
+        print("\nCalculated Pay Dates for your budget period (adjusted for weekends/holidays):")
         for date in budget_config['income']['dates']:
             print(f"- {date.strftime('%Y-%m-%d')}")
 
@@ -1398,10 +1419,16 @@ def main():
     while True:
         print("\n[1] Sign In")
         print("[2] Sign Up")
-        print("[3] Exit")
+        print("[3] Delete Account")
+        print("[4] Exit")
         choice = input("Please select an option: ")
 
         if choice == '1':
+            users = [d for d in os.listdir() if os.path.isdir(d)]
+            if not users:
+                print("No user accounts found. Please sign up first.")
+                continue
+            print("Existing Users:", ", ".join(users))
             username = input("Enter your username: ").lower()
             if not username.strip():
                 print("Username cannot be empty.")
@@ -1431,10 +1458,28 @@ def main():
                 print(f"Error creating directory for user '{username}': {e}")
 
         elif choice == '3':
+            users = [d for d in os.listdir() if os.path.isdir(d)]
+            if not users:
+                print("No user accounts found to delete.")
+                continue
+            print("Existing Users:", ", ".join(users))
+            username = input("Enter the username of the account to delete: ").lower()
+            if username in users:
+                if get_yes_no_input(
+                        f"Are you sure you want to permanently delete the account for '{username}'? This cannot be undone."):
+                    try:
+                        shutil.rmtree(username)
+                        print(f"Account '{username}' has been deleted.")
+                    except OSError as e:
+                        print(f"Error deleting account: {e}")
+            else:
+                print(f"Error: No account found for username '{username}'.")
+
+        elif choice == '4':
             print("Goodbye!")
             break
         else:
-            print("Invalid choice. Please enter 1, 2, or 3.")
+            print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
         if not get_yes_no_input("\nDo you want to return to the main user menu? (yes=return, no=exit)"):
             print("Goodbye!")
