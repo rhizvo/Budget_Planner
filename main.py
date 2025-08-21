@@ -287,7 +287,6 @@ class FinancialItem:
         if init_data.get('start_date_for_schedule'):
             init_data['start_date_for_schedule'] = datetime.fromisoformat(init_data['start_date_for_schedule']).date()
 
-        # This generic factory works because child classes will override this if they have different __init__ args
         return cls(**init_data)
 
 
@@ -707,8 +706,7 @@ class BudgetPlannerApp:
             choice = input("Enter your choice (1-10): ")
 
             if choice == '1':
-                # To be implemented
-                print("Coming soon!")
+                self._manage_balances()
             elif choice == '9':
                 new_start, new_end, changed = self._manage_budget_period()
                 if changed:
@@ -727,7 +725,6 @@ class BudgetPlannerApp:
 
         output_filename = os.path.join(self.current_user.directory, "budget_plan.csv")
 
-        # Create a deep copy to avoid modifying the live budget object during report generation
         report_budget = copy.deepcopy(self.current_user.budget)
         report_budget.recalculate_schedules(start_date, end_date, self.holidays)
 
@@ -839,6 +836,19 @@ class BudgetPlannerApp:
         print("\n--- Guided Budget Setup ---")
         print("Let's walk through all the sections of your budget.")
 
+        self._manage_balances()
+        # self._manage_income(start_date, end_date)
+        # self._manage_groceries()
+        # self._manage_bills(start_date, end_date)
+        # self._manage_streaming(start_date, end_date)
+        # self._manage_misc_monthly(start_date, end_date)
+        # self._manage_one_time()
+        # self._manage_savings_transfers(start_date, end_date)
+
+        print("\n--- Guided Setup Complete ---")
+
+    def _manage_balances(self):
+        """Handles updating the initial debit balance and managing savings accounts."""
         print("\n--- Initial Balances ---")
         current_debit = self.current_user.budget.initial_debit_balance
         print(f"Current initial debit balance: ${current_debit:.2f}")
@@ -848,8 +858,6 @@ class BudgetPlannerApp:
                 self.current_user.budget.initial_debit_balance = new_debit
 
         self._manage_savings_accounts()
-
-        print("\n--- Guided Setup Complete ---")
 
     def _manage_savings_accounts(self):
         """Manages the creation, modification, and deletion of named savings accounts."""
