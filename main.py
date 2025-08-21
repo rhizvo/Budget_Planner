@@ -431,14 +431,16 @@ def manage_bills(budget_config, start_date, end_date, holidays):
                                     if new_freq == 'bi-monthly':
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this bi-monthly payment")
+                                        selected_bill['start_date_for_schedule'] = start_date_input
                                         selected_bill['dates'] = calculate_bi_monthly_dates_every_two_months(
                                             start_date_input, end_date, holidays)
                                     elif new_freq == "one-time":
-                                        selected_bill['dates'].append(get_date_input(
-                                            f"Enter the specific date for this one-time {selected_bill['name']} payment"))
+                                        selected_bill['dates'] = [get_date_input(
+                                            f"Enter the specific date for this one-time {selected_bill['name']} payment")]
                                     else:
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this payment schedule")
+                                        selected_bill['start_date_for_schedule'] = start_date_input
                                         selected_bill['dates'] = get_recurring_dates(start_date_input, end_date,
                                                                                      selected_bill['frequency'],
                                                                                      holidays)
@@ -449,6 +451,7 @@ def manage_bills(budget_config, start_date, end_date, holidays):
                                 if new_dates:
                                     selected_bill['frequency'] = "manual"
                                     selected_bill['dates'] = new_dates
+                                    selected_bill.pop('start_date_for_schedule', None)  # Remove if it exists
                                     print("Dates updated.")
                                 else:
                                     print("No dates were entered. Keeping previous dates.")
@@ -476,39 +479,37 @@ def manage_bills(budget_config, start_date, end_date, holidays):
 
             bill_frequency = None
             bill_dates = []
+            bill_start_date = None
 
             if get_yes_no_input("Do you want to set a periodic schedule? (e.g., weekly, monthly, bi-monthly)"):
                 bill_frequency = get_frequency_input(f"How often do you pay {bill_name}?")
                 if bill_frequency == 'bi-monthly':
                     start_date_input = get_date_input("Enter the start date for this bi-monthly payment")
+                    bill_start_date = start_date_input
                     bill_dates = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date, holidays)
                 elif bill_frequency == "one-time":
                     bill_dates.append(get_date_input(f"Enter the specific date for this one-time {bill_name} payment"))
                 else:  # Handles weekly, bi-weekly, monthly, etc.
                     start_date_input = get_date_input("Enter the start date for this payment schedule")
+                    bill_start_date = start_date_input
                     bill_dates = get_recurring_dates(start_date_input, end_date, bill_frequency, holidays)
             else:
                 print("You've chosen to enter specific dates manually.")
                 bill_frequency = "manual"
                 bill_dates = get_multiple_dates(f"Enter a specific payment date for {bill_name}")
 
-            if bill_dates and bill_frequency not in ["weekly", "one-time", "bi-monthly"]:
-                adjusted_bill_dates = []
-                for b_date in bill_dates:
-                    adjusted_date = b_date
-                    while not is_business_day(adjusted_date, holidays):
-                        adjusted_date -= timedelta(days=1)
-                    adjusted_bill_dates.append(adjusted_date)
-                bill_dates = adjusted_bill_dates
-
-            current_bills.append({
+            new_bill = {
                 'name': bill_name,
                 'amount': bill_amount,
                 'frequency': bill_frequency,
                 'dates': bill_dates,
                 'expiry_date': bill_expiry_date,
                 'category': 'Bills'
-            })
+            }
+            if bill_start_date:
+                new_bill['start_date_for_schedule'] = bill_start_date
+
+            current_bills.append(new_bill)
             if not get_yes_no_input("Add another bill?"):
                 break
 
@@ -559,14 +560,16 @@ def manage_streaming(budget_config, start_date, end_date, holidays):
                                     if new_freq == 'bi-monthly':
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this bi-monthly payment")
+                                        selected_service['start_date_for_schedule'] = start_date_input
                                         selected_service['dates'] = calculate_bi_monthly_dates_every_two_months(
                                             start_date_input, end_date, holidays)
                                     elif new_freq == "one-time":
-                                        selected_service['dates'].append(get_date_input(
-                                            f"Enter the specific date for this one-time {selected_service['name']} payment"))
+                                        selected_service['dates'] = [get_date_input(
+                                            f"Enter the specific date for this one-time {selected_service['name']} payment")]
                                     else:
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this payment schedule")
+                                        selected_service['start_date_for_schedule'] = start_date_input
                                         selected_service['dates'] = get_recurring_dates(start_date_input,
                                                                                         end_date,
                                                                                         selected_service['frequency'],
@@ -578,6 +581,7 @@ def manage_streaming(budget_config, start_date, end_date, holidays):
                                 if new_dates:
                                     selected_service['frequency'] = "manual"
                                     selected_service['dates'] = new_dates
+                                    selected_service.pop('start_date_for_schedule', None)
                                     print("Dates updated.")
                                 else:
                                     print("No dates were entered. Keeping previous dates.")
@@ -607,26 +611,33 @@ def manage_streaming(budget_config, start_date, end_date, holidays):
 
             service_frequency = None
             service_dates = []
+            service_start_date = None
 
             if get_yes_no_input("Do you want to set a periodic schedule?"):
                 service_frequency = get_frequency_input(f"How often do you pay {service_name}?")
                 if service_frequency == 'bi-monthly':
                     start_date_input = get_date_input("Enter the start date for this bi-monthly payment")
+                    service_start_date = start_date_input
                     service_dates = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date, holidays)
                 elif service_frequency == "one-time":
                     service_dates.append(
                         get_date_input(f"Enter the specific date for this one-time {service_name} payment"))
                 else:  # Handles weekly, bi-weekly, monthly, etc.
                     start_date_input = get_date_input("Enter the start date for this payment schedule")
+                    service_start_date = start_date_input
                     service_dates = get_recurring_dates(start_date_input, end_date, service_frequency, holidays)
             else:
                 print("You've chosen to enter specific dates manually.")
                 service_frequency = "manual"
                 service_dates = get_multiple_dates(f"Enter a specific pay date for {service_name}")
 
-            current_streaming.append(
-                {'name': service_name, 'amount': service_amount, 'frequency': service_frequency, 'dates': service_dates,
-                 'expiry_date': service_expiry_date, 'category': 'Streaming Services'})
+            new_service = {
+                'name': service_name, 'amount': service_amount, 'frequency': service_frequency, 'dates': service_dates,
+                'expiry_date': service_expiry_date, 'category': 'Streaming Services'}
+            if service_start_date:
+                new_service['start_date_for_schedule'] = service_start_date
+
+            current_streaming.append(new_service)
             if not get_yes_no_input("Add another streaming service?"):
                 break
 
@@ -679,14 +690,16 @@ def manage_misc_monthly(budget_config, start_date, end_date, holidays):
                                     if new_freq == 'bi-monthly':
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this bi-monthly payment")
+                                        selected_misc['start_date_for_schedule'] = start_date_input
                                         selected_misc['dates'] = calculate_bi_monthly_dates_every_two_months(
                                             start_date_input, end_date, holidays)
                                     elif new_freq == "one-time":
-                                        selected_misc['dates'].append(get_date_input(
-                                            f"Enter the specific date for this one-time {selected_misc['name']} payment"))
+                                        selected_misc['dates'] = [get_date_input(
+                                            f"Enter the specific date for this one-time {selected_misc['name']} payment")]
                                     else:
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this payment schedule")
+                                        selected_misc['start_date_for_schedule'] = start_date_input
                                         selected_misc['dates'] = get_recurring_dates(start_date_input, end_date,
                                                                                      selected_misc['frequency'],
                                                                                      holidays)
@@ -697,6 +710,7 @@ def manage_misc_monthly(budget_config, start_date, end_date, holidays):
                                 if new_dates:
                                     selected_misc['frequency'] = "manual"
                                     selected_misc['dates'] = new_dates
+                                    selected_misc.pop('start_date_for_schedule', None)
                                     print("Dates updated.")
                                 else:
                                     print("No dates were entered. Keeping previous dates.")
@@ -726,25 +740,32 @@ def manage_misc_monthly(budget_config, start_date, end_date, holidays):
 
             misc_frequency = None
             misc_dates = []
+            misc_start_date = None
 
             if get_yes_no_input("Do you want to set a periodic schedule?"):
                 misc_frequency = get_frequency_input(f"How often do you pay {misc_name}?")
                 if misc_frequency == 'bi-monthly':
                     start_date_input = get_date_input("Enter the start date for this bi-monthly payment")
+                    misc_start_date = start_date_input
                     misc_dates = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date, holidays)
                 elif misc_frequency == "one-time":
                     misc_dates.append(get_date_input(f"Enter the specific date for this one-time {misc_name} payment"))
                 else:  # Handles weekly, bi-weekly, monthly, etc.
                     start_date_input = get_date_input("Enter the start date for this payment schedule")
+                    misc_start_date = start_date_input
                     misc_dates = get_recurring_dates(start_date_input, end_date, misc_frequency, holidays)
             else:
                 print("You've chosen to enter specific dates manually.")
                 misc_frequency = "manual"
                 misc_dates = get_multiple_dates(f"Enter a specific pay date for {misc_name}")
 
-            current_misc.append(
-                {'name': misc_name, 'amount': misc_amount, 'frequency': misc_frequency, 'dates': misc_dates,
-                 'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'})
+            new_misc = {
+                'name': misc_name, 'amount': misc_amount, 'frequency': misc_frequency, 'dates': misc_dates,
+                'expiry_date': misc_expiry_date, 'category': 'Misc Monthly'}
+            if misc_start_date:
+                new_misc['start_date_for_schedule'] = misc_start_date
+
+            current_misc.append(new_misc)
             if not get_yes_no_input("Add another miscellaneous monthly expense?"):
                 break
 
@@ -929,18 +950,21 @@ def manage_savings(budget_config, start_date, end_date, holidays):
                                     selected_transfer['dates'] = []
                                     if new_freq == 'match payday':
                                         selected_transfer['dates'] = budget_config['income']['dates']
+                                        selected_transfer.pop('start_date_for_schedule', None)
                                         print("Savings transfer dates now match your income dates.")
                                     elif new_freq == 'bi-monthly':
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this bi-monthly transfer")
+                                        selected_transfer['start_date_for_schedule'] = start_date_input
                                         selected_transfer['dates'] = calculate_bi_monthly_dates_every_two_months(
                                             start_date_input, end_date, holidays)
                                     elif new_freq == "one-time":
-                                        selected_transfer['dates'].append(
-                                            get_date_input(f"Enter the specific date for this one-time transfer"))
+                                        selected_transfer['dates'] = [
+                                            get_date_input(f"Enter the specific date for this one-time transfer")]
                                     else:
                                         start_date_input = get_date_input(
                                             "Enter the new start date for this transfer schedule")
+                                        selected_transfer['start_date_for_schedule'] = start_date_input
                                         selected_transfer['dates'] = get_recurring_dates(start_date_input,
                                                                                          end_date,
                                                                                          new_freq, holidays)
@@ -950,6 +974,7 @@ def manage_savings(budget_config, start_date, end_date, holidays):
                                 if new_dates:
                                     selected_transfer['frequency'] = "manual"
                                     selected_transfer['dates'] = new_dates
+                                    selected_transfer.pop('start_date_for_schedule', None)
                                     print("Dates updated.")
                                 else:
                                     print("No dates were entered. Keeping previous dates.")
@@ -974,6 +999,7 @@ def manage_savings(budget_config, start_date, end_date, holidays):
 
                 savings_frequency = None
                 s_dates = []
+                s_start_date = None
                 schedule_created_successfully = False
 
                 freq_options = []
@@ -989,11 +1015,13 @@ def manage_savings(budget_config, start_date, end_date, holidays):
                             print("Savings transfer dates now match your income dates.")
                         elif savings_frequency == 'bi-monthly':
                             start_date_input = get_date_input("Enter the start date for this bi-monthly transfer")
+                            s_start_date = start_date_input
                             s_dates = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date, holidays)
                         elif savings_frequency == "one-time":
                             s_dates.append(get_date_input("Enter the specific date for this savings transfer"))
                         else:
                             start_date_input = get_date_input("Enter the start date for this transfer schedule")
+                            s_start_date = start_date_input
                             s_dates = get_recurring_dates(start_date_input, end_date, savings_frequency, holidays)
                         schedule_created_successfully = True
                         break
@@ -1013,9 +1041,13 @@ def manage_savings(budget_config, start_date, end_date, holidays):
                                 break
 
                 if schedule_created_successfully:
-                    current_savings_transfers.append(
-                        {'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates,
-                         'target': target_account})
+                    new_transfer = {
+                        'amount': savings_amount, 'frequency': savings_frequency, 'dates': s_dates,
+                        'target': target_account}
+                    if s_start_date:
+                        new_transfer['start_date_for_schedule'] = s_start_date
+
+                    current_savings_transfers.append(new_transfer)
                     print(f"Transfer of ${savings_amount:.2f} to '{target_account}' added.")
                 else:
                     print("Transfer creation cancelled.")
@@ -1026,8 +1058,8 @@ def manage_savings(budget_config, start_date, end_date, holidays):
 
 def manage_income(budget_config, start_date, end_date, holidays):
     print("\n--- Income Information ---")
-    current_income_amount = budget_config['income']['amount']
-    current_income_freq = budget_config['income']['frequency']
+    current_income_amount = budget_config['income'].get('amount', 0.0)
+    current_income_freq = budget_config['income'].get('frequency')
 
     if current_income_amount > 0:
         print(f"Current income: ${current_income_amount:.2f} ({current_income_freq})")
@@ -1044,13 +1076,17 @@ def manage_income(budget_config, start_date, end_date, holidays):
 
             if new_freq == 'twice-monthly':
                 budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
+                budget_config['income'].pop('start_date_for_schedule', None)
             elif new_freq == 'bi-monthly':
                 if get_yes_no_input("Do you want to update the start date for this bi-monthly income?"):
                     start_date_input = get_date_input("Enter the start date for this bi-monthly income")
+                    budget_config['income']['start_date_for_schedule'] = start_date_input
                     budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date_input,
                                                                                                    end_date, holidays)
             elif get_yes_no_input("Do you want to update the date of your next upcoming paycheck?"):
-                budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+                start_date_input = get_date_input("Enter the date of your next upcoming paycheck")
+                budget_config['income']['start_date_for_schedule'] = start_date_input
+                budget_config['income']['dates'] = [start_date_input]
     else:
         budget_config['income']['amount'] = get_float_input("Enter your income amount after taxes")
         budget_config['income']['frequency'] = get_frequency_input("How often do you receive this income?",
@@ -1059,14 +1095,18 @@ def manage_income(budget_config, start_date, end_date, holidays):
             budget_config['income']['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
         elif budget_config['income']['frequency'] == 'bi-monthly':
             start_date_input = get_date_input("Enter the start date for this bi-monthly income")
+            budget_config['income']['start_date_for_schedule'] = start_date_input
             budget_config['income']['dates'] = calculate_bi_monthly_dates_every_two_months(start_date_input, end_date,
                                                                                            holidays)
         else:
-            budget_config['income']['dates'] = [get_date_input("Enter the date of your next upcoming paycheck")]
+            start_date_input = get_date_input("Enter the date of your next upcoming paycheck")
+            budget_config['income']['start_date_for_schedule'] = start_date_input
+            budget_config['income']['dates'] = [start_date_input]
 
-    if budget_config['income']['frequency'] not in ['one-time', 'bi-monthly', 'twice-monthly'] and \
-            budget_config['income']['dates']:
-        budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['dates'][0], end_date,
+    if budget_config['income']['frequency'] not in ['one-time', 'bi-monthly', 'twice-monthly', 'manual'] and \
+            budget_config['income'].get('start_date_for_schedule'):
+        budget_config['income']['dates'] = get_recurring_dates(budget_config['income']['start_date_for_schedule'],
+                                                               end_date,
                                                                budget_config['income']['frequency'], holidays)
 
     if not budget_config['income']['dates']:
@@ -1079,27 +1119,68 @@ def manage_income(budget_config, start_date, end_date, holidays):
 
 # --- NEW: Menu and Workflow Functions ---
 
+def recalculate_all_schedules(budget_config, start_date, end_date, holidays):
+    """Recalculates all recurring dates based on the new budget period."""
+    print("\nRecalculating all schedules for the new budget period...")
+
+    # 1. Recalculate Income
+    income = budget_config.get('income', {})
+    income_freq = income.get('frequency')
+    if income_freq:
+        if income_freq == 'twice-monthly':
+            income['dates'] = calculate_twice_monthly_dates(start_date, end_date, holidays)
+        elif income.get('start_date_for_schedule'):
+            original_start = income['start_date_for_schedule']
+            if income_freq == 'bi-monthly':
+                income['dates'] = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays)
+            elif income_freq not in ['one-time', 'manual']:
+                income['dates'] = get_recurring_dates(original_start, end_date, income_freq, holidays)
+
+    # 2. Recalculate Expenses & Savings
+    items_to_recalculate = (budget_config['expense_categories']['Bills'] +
+                            budget_config['expense_categories']['Streaming Services'] +
+                            budget_config['expense_categories']['Misc Monthly'] +
+                            budget_config['savings_transfers'])
+
+    for item in items_to_recalculate:
+        freq = item.get('frequency')
+        if freq == 'match payday':
+            item['dates'] = budget_config.get('income', {}).get('dates', [])
+        elif item.get('start_date_for_schedule'):
+            original_start = item['start_date_for_schedule']
+            if freq == 'bi-monthly':
+                item['dates'] = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays)
+            elif freq not in ['one-time', 'manual', 'weekly']:
+                item['dates'] = get_recurring_dates(original_start, end_date, freq, holidays)
+
+    print("Schedules recalculated.")
+    return budget_config
+
+
 def manage_budget_period(budget_config):
     """Gets or updates the budget start and end dates."""
     print("\n--- Manage Budget Period ---")
 
     start_date = budget_config.get('start_date')
     end_date = budget_config.get('end_date')
+    period_changed = False
 
     if start_date and end_date:
         print(f"Current budget period is from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
         if not get_yes_no_input("Do you want to change it?"):
-            return start_date, end_date
+            return start_date, end_date, period_changed
 
     print("Please define your budget period.")
     while True:
         new_start_date = get_date_input("Enter the budget start date")
         new_end_date = get_date_input("Enter the budget end date", start_after=new_start_date)
         if new_end_date > new_start_date:
+            if new_start_date != start_date or new_end_date != end_date:
+                period_changed = True
             budget_config['start_date'] = new_start_date
             budget_config['end_date'] = new_end_date
             print("Budget period updated.")
-            return new_start_date, new_end_date
+            return new_start_date, new_end_date, period_changed
         else:
             # This case is already handled by get_date_input, but as a fallback.
             print("Error: The end date must be after the start date. Please try again.")
@@ -1135,6 +1216,7 @@ def run_guided_setup(budget_config, start_date, end_date, holidays):
 
 def manage_categories_menu(budget_config, start_date, end_date, holidays):
     """Shows a menu to manage specific budget categories."""
+    period_changed = False
     while True:
         print("\n--- Manage Specific Categories ---")
         print("1. Initial Debit & Savings Balances")
@@ -1167,15 +1249,16 @@ def manage_categories_menu(budget_config, start_date, end_date, holidays):
         elif choice == '8':
             manage_savings(budget_config, start_date, end_date, holidays)
         elif choice == '9':
-            # This will update the dates in the parent scope
-            new_start, new_end = manage_budget_period(budget_config)
-            start_date, end_date = new_start, new_end
+            new_start, new_end, changed = manage_budget_period(budget_config)
+            if changed:
+                start_date, end_date = new_start, new_end
+                period_changed = True
         elif choice == '10':
             print("Returning to the previous menu.")
             break
         else:
             print("Invalid choice. Please enter a number between 1 and 10.")
-    return start_date, end_date
+    return start_date, end_date, period_changed
 
 
 def generate_report(budget_config, username, start_date, end_date, holidays):
@@ -1351,38 +1434,44 @@ def plan_budget_for_year(username):
         print(f"No existing budget file found for {username}. Starting a new budget setup.")
 
     # --- NEW: Manage Budget Period ---
-    start_date, end_date = manage_budget_period(budget_config)
+    start_date, end_date, period_changed = manage_budget_period(budget_config)
 
-    # --- NEW: Multi-year Holiday File Setup ---
-    print("\n--- Holiday Information ---")
-    required_years = range(start_date.year, end_date.year + 1)
-    holiday_files_to_load = []
-    holidays_folder = os.path.join(username, 'holidays')
-    os.makedirs(holidays_folder, exist_ok=True)
+    # --- This block needs to be a function to be reusable ---
+    def setup_holidays_and_recalculate(budget_config, s_date, e_date):
+        print("\n--- Holiday Information ---")
+        required_years = range(s_date.year, e_date.year + 1)
+        holiday_files_to_load = []
+        holidays_folder = os.path.join(username, 'holidays')
+        os.makedirs(holidays_folder, exist_ok=True)
 
-    for year in required_years:
-        user_holiday_path = os.path.join(holidays_folder, f"holidays_{year}.txt")
-        holiday_files_to_load.append(user_holiday_path)
-        if not os.path.exists(user_holiday_path):
-            print(f"Holiday file for {year} is missing.")
-            while True:
-                source_holiday_file = input(
-                    f"Enter the path to a source holiday file for {year} (e.g., holidays.txt): ")
-                if os.path.exists(source_holiday_file):
-                    try:
-                        shutil.copy(source_holiday_file, user_holiday_path)
-                        print(f"Holiday file for {year} copied to your user folder.")
-                        break
-                    except Exception as e:
-                        print(f"Error copying file: {e}")
-                        if not get_yes_no_input("Try a different file path?"): break
-                else:
-                    print(f"File not found at '{source_holiday_file}'.")
-                    if not get_yes_no_input("Try again?"): break
+        for year in required_years:
+            user_holiday_path = os.path.join(holidays_folder, f"holidays_{year}.txt")
+            holiday_files_to_load.append(user_holiday_path)
+            if not os.path.exists(user_holiday_path):
+                print(f"Holiday file for {year} is missing.")
+                while True:
+                    source_holiday_file = input(
+                        f"Enter the path to a source holiday file for {year} (e.g., holidays.txt): ")
+                    if os.path.exists(source_holiday_file):
+                        try:
+                            shutil.copy(source_holiday_file, user_holiday_path)
+                            print(f"Holiday file for {year} copied to your user folder.")
+                            break
+                        except Exception as e:
+                            print(f"Error copying file: {e}")
+                            if not get_yes_no_input("Try a different file path?"): break
+                    else:
+                        print(f"File not found at '{source_holiday_file}'.")
+                        if not get_yes_no_input("Try again?"): break
 
-    holidays = load_holidays(holiday_files_to_load)
-    if holidays:
-        print(f"Loaded {len(holidays)} holidays across {len(required_years)} year(s).")
+        holidays = load_holidays(holiday_files_to_load)
+        if holidays:
+            print(f"Loaded {len(holidays)} holidays across {len(required_years)} year(s).")
+
+        recalculate_all_schedules(budget_config, s_date, e_date, holidays)
+        return holidays
+
+    holidays = setup_holidays_and_recalculate(budget_config, start_date, end_date)
 
     # --- NEW: Main Action Loop ---
     while True:
@@ -1399,7 +1488,11 @@ def plan_budget_for_year(username):
         if choice == '1':
             run_guided_setup(budget_config, start_date, end_date, holidays)
         elif choice == '2':
-            start_date, end_date = manage_categories_menu(budget_config, start_date, end_date, holidays)
+            new_start, new_end, period_changed = manage_categories_menu(budget_config, start_date, end_date, holidays)
+            if period_changed:
+                start_date, end_date = new_start, new_end
+                holidays = setup_holidays_and_recalculate(budget_config, start_date, end_date)
+
         elif choice == '3':
             # Generate the report first, while dates are still datetime objects.
             generate_report(budget_config, username, start_date, end_date, holidays)
