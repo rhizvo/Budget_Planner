@@ -1,3 +1,4 @@
+import copy
 import csv
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -5,7 +6,6 @@ import calendar
 import os
 import json
 import shutil
-import copy
 
 
 # --- Helper Functions (Remain largely unchanged) ---
@@ -707,6 +707,10 @@ class BudgetPlannerApp:
 
             if choice == '1':
                 self._manage_balances()
+            elif choice == '2':
+                self._manage_income(start_date, end_date)
+            elif choice == '3':
+                self._manage_groceries()
             elif choice == '9':
                 new_start, new_end, changed = self._manage_budget_period()
                 if changed:
@@ -837,8 +841,8 @@ class BudgetPlannerApp:
         print("Let's walk through all the sections of your budget.")
 
         self._manage_balances()
-        # self._manage_income(start_date, end_date)
-        # self._manage_groceries()
+        self._manage_income(start_date, end_date)
+        self._manage_groceries()
         # self._manage_bills(start_date, end_date)
         # self._manage_streaming(start_date, end_date)
         # self._manage_misc_monthly(start_date, end_date)
@@ -921,6 +925,59 @@ class BudgetPlannerApp:
                         print("Invalid input.")
                 else:
                     break
+
+    def _manage_income(self, start_date, end_date):
+        """Handles the logic for adding or updating income information."""
+        print("\n--- Income Information ---")
+        budget = self.current_user.budget
+
+        if budget.income and budget.income.amount > 0:
+            print(f"Current income: ${budget.income.amount:.2f} ({budget.income.frequency})")
+            if not get_yes_no_input("Do you want to update your income information?"):
+                return
+
+        amount = get_float_input("Enter your income amount after taxes")
+        frequency = get_frequency_input("How often do you receive this income?", extra_options=['twice-monthly'])
+
+        start_date_for_schedule = None
+        dates = []
+
+        if frequency == 'twice-monthly':
+            dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
+        elif frequency == 'bi-monthly':
+            start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
+            dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
+        else:
+            start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
+            dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
+
+        budget.income = Income(name="Income", amount=amount, frequency=frequency, dates=dates,
+                               start_date_for_schedule=start_date_for_schedule)
+
+        if not budget.income.dates:
+            print("Warning: No pay dates were generated for the budget period.")
+        else:
+            print("\nCalculated Pay Dates for your budget period:")
+            for date in budget.income.dates:
+                print(f"- {date.strftime('%Y-%m-%d')}")
+
+    def _manage_groceries(self):
+        """Handles the logic for managing grocery expenses."""
+        print("\n--- Manage Your Groceries ---")
+        budget = self.current_user.budget
+        grocery_expense = next((exp for exp in budget.expenses if exp.category == 'Groceries'), None)
+
+        if grocery_expense:
+            print(f"Current typical weekly grocery expense: ${grocery_expense.amount:.2f}")
+            if get_yes_no_input("Do you want to update your weekly grocery expense?"):
+                new_amount = get_float_input("Enter your new typical weekly grocery expense")
+                if new_amount is not None:
+                    grocery_expense.amount = new_amount
+        elif get_yes_no_input("Do you have a regular grocery expense?"):
+            amount = get_float_input("Enter your typical weekly grocery expense")
+            if amount is not None:
+                budget.expenses.append(
+                    Expense(name='Groceries', amount=amount, frequency='weekly', category='Groceries'))
 
 
 if __name__ == "__main__":
