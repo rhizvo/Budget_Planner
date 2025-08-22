@@ -282,10 +282,22 @@ class FinancialItem:
 
     @classmethod
     def from_dict(cls, data):
+        # Create a mutable copy to avoid altering the original dictionary
         init_data = data.copy()
+
+        # Deserialize dates
         init_data['dates'] = [datetime.fromisoformat(d).date() for d in init_data.get('dates', [])]
         if init_data.get('start_date_for_schedule'):
             init_data['start_date_for_schedule'] = datetime.fromisoformat(init_data['start_date_for_schedule']).date()
+
+        # Remove keys that are not part of the constructor for this specific class
+        # This makes the from_dict more robust for subclasses
+        if 'category' in init_data:
+            del init_data['category']
+        if 'expiry_date' in init_data:
+            del init_data['expiry_date']
+        if 'target' in init_data:
+            del init_data['target']
 
         return cls(**init_data)
 
@@ -314,6 +326,11 @@ class Expense(FinancialItem):
             init_data['start_date_for_schedule'] = datetime.fromisoformat(init_data['start_date_for_schedule']).date()
         if init_data.get('expiry_date'):
             init_data['expiry_date'] = datetime.fromisoformat(init_data['expiry_date']).date()
+
+        # For direct instantiation of Expense, remove subclass-specific keys
+        if 'target' in init_data:
+            del init_data['target']
+
         return cls(**init_data)
 
 
@@ -337,26 +354,36 @@ class Income(FinancialItem):
     """Represents an income source."""
 
     def __init__(self, **kwargs):
+        # Default name if not provided
+        kwargs.setdefault('name', 'Primary Income')
         super().__init__(**kwargs)
 
 
 class SavingsTransfer(FinancialItem):
     """Represents a transfer to a savings account."""
 
-    def __init__(self, target_account, **kwargs):
-        super().__init__(**kwargs)
-        self.target_account = target_account
+    def __init__(self, name, amount, frequency, target, dates=None, start_date_for_schedule=None):
+        super().__init__(name, amount, frequency, dates, start_date_for_schedule)
+        self.target = target
 
     def to_dict(self):
         data = super().to_dict()
-        data['target'] = self.target_account
+        data['target'] = self.target
         return data
 
     @classmethod
     def from_dict(cls, data):
         init_data = data.copy()
-        init_data['target_account'] = init_data.pop('target', None)
-        return super().from_dict(init_data)
+        init_data['dates'] = [datetime.fromisoformat(d).date() for d in init_data.get('dates', [])]
+        if init_data.get('start_date_for_schedule'):
+            init_data['start_date_for_schedule'] = datetime.fromisoformat(init_data['start_date_for_schedule']).date()
+
+        if 'category' in init_data:
+            del init_data['category']
+        if 'expiry_date' in init_data:
+            del init_data['expiry_date']
+
+        return cls(**init_data)
 
 
 class SavingsAccount:
@@ -481,7 +508,7 @@ class User:
                 data = json.load(f)
                 self.budget = Budget.from_dict(data)
                 print(f"Budget configuration loaded for {self.username}.")
-            except (json.JSONDecodeError, TypeError) as e:
+            except (json.JSONDecodeError, TypeError, KeyError) as e:
                 print(f"Error reading or parsing budget file for {self.username}: {e}. Starting fresh.")
                 self.budget = Budget()
 
@@ -532,7 +559,7 @@ class BudgetPlannerApp:
                 break
 
     def _handle_sign_in(self):
-        users = [d for d in os.listdir() if os.path.isdir(d)]
+        users = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith('.')]
         if not users:
             print("No user accounts found. Please sign up first.")
             return
@@ -568,7 +595,7 @@ class BudgetPlannerApp:
             print(f"Error creating directory for user '{username}': {e}")
 
     def _handle_delete_account(self):
-        users = [d for d in os.listdir() if os.path.isdir(d)]
+        users = [d for d in os.listdir() if os.path.isdir(d) and not d.startswith('.')]
         if not users:
             print("No user accounts found to delete.")
             return
@@ -681,10 +708,6 @@ class BudgetPlannerApp:
         if self.holidays:
             print(f"Loaded {len(self.holidays)} holidays across {len(required_years)} year(s).")
 
-        self.current_user.budget.recalculate_schedules(start_date, end_date, self.holidays)
-
-    def _recalculate_all_schedules(self, start_date, end_date):
-        """Wrapper to call the budget's recalculation method."""
         self.current_user.budget.recalculate_schedules(start_date, end_date, self.holidays)
 
     def _manage_categories_menu(self, start_date, end_date):
@@ -801,7 +824,7 @@ class BudgetPlannerApp:
                             should_apply_savings_this_week = True
                             break
                 if should_apply_savings_this_week:
-                    weekly_savings_by_target[s_transfer.target_account] += s_transfer.amount
+                    weekly_savings_by_target[s_transfer.target] += s_transfer.amount
                     weekly_total_savings += s_transfer.amount
 
             running_balance += weekly_income - weekly_total_expenses - weekly_total_savings
@@ -896,7 +919,7 @@ class BudgetPlannerApp:
                 for i, acc in enumerate(savings_accounts):
                     print(f"  {i + 1}. {acc.name}: ${acc.balance:.2f}")
 
-                if get_yes_no_input("\nDo you want to modify your savings accounts?"):
+                if get_yes_no_input("\nDo you want to add a new saving account or modify your existing ones?"):
                     try:
                         choice_str = input(
                             "Enter the number of the account to modify/remove, 'add' a new one, or 'done': ").lower()
@@ -920,7 +943,7 @@ class BudgetPlannerApp:
                                 # Cascade delete
                                 self.current_user.budget.savings_transfers = [t for t in
                                                                               self.current_user.budget.savings_transfers
-                                                                              if t.target_account != old_name]
+                                                                              if t.target != old_name]
                                 savings_accounts.pop(idx)
                                 print(f"Account '{old_name}' and its transfers have been removed.")
                             else:
@@ -936,6 +959,7 @@ class BudgetPlannerApp:
                 else:
                     break
 
+    # --- MODIFIED METHOD ---
     def _manage_income(self, start_date, end_date):
         """Handles the logic for adding or updating income information."""
         print("\n--- Income Information ---")
@@ -946,23 +970,52 @@ class BudgetPlannerApp:
             if not get_yes_no_input("Do you want to update your income information?"):
                 return
 
-        amount = get_float_input("Enter your income amount after taxes")
-        frequency = get_frequency_input("How often do you receive this income?", extra_options=['twice-monthly'])
+            new_amount = get_float_input(f"Enter new income (or press Enter to keep ${budget.income.amount:.2f})")
+            new_freq = get_frequency_input(f"Enter new frequency (or press Enter to keep '{budget.income.frequency}')",
+                                           extra_options=['twice-monthly'])
 
-        start_date_for_schedule = None
-        dates = []
+            if new_amount is not None:
+                budget.income.amount = new_amount
+            if new_freq is not None:
+                budget.income.frequency = new_freq
 
-        if frequency == 'twice-monthly':
-            dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
-        elif frequency == 'bi-monthly':
-            start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
-            dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
-        else:
-            start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
-            dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
+            # Recalculate dates if frequency or schedule start date changes
+            if new_freq is not None or get_yes_no_input("Do you want to update the schedule start date?"):
+                if budget.income.frequency == 'twice-monthly':
+                    budget.income.dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
+                    budget.income.start_date_for_schedule = None
+                elif budget.income.frequency == 'bi-monthly':
+                    start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
+                    budget.income.start_date_for_schedule = start_date_for_schedule
+                    budget.income.dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date,
+                                                                                      self.holidays)
+                else:
+                    start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
+                    budget.income.start_date_for_schedule = start_date_for_schedule
+                    budget.income.dates = get_recurring_dates(start_date_for_schedule, end_date,
+                                                              budget.income.frequency, self.holidays)
 
-        budget.income = Income(name="Income", amount=amount, frequency=frequency, dates=dates,
-                               start_date_for_schedule=start_date_for_schedule)
+        else:  # No income exists, set it up
+            amount = get_float_input("Enter your income amount after taxes")
+            if amount is None: return
+
+            frequency = get_frequency_input("How often do you receive this income?", extra_options=['twice-monthly'])
+            if frequency is None: return
+
+            start_date_for_schedule = None
+            dates = []
+
+            if frequency == 'twice-monthly':
+                dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
+            elif frequency == 'bi-monthly':
+                start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
+                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
+            else:
+                start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
+                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
+
+            budget.income = Income(amount=amount, frequency=frequency, dates=dates,
+                                   start_date_for_schedule=start_date_for_schedule)
 
         if not budget.income.dates:
             print("Warning: No pay dates were generated for the budget period.")
@@ -989,136 +1042,266 @@ class BudgetPlannerApp:
                 budget.expenses.append(
                     Expense(name='Groceries', amount=amount, frequency='weekly', category='Groceries'))
 
+    # --- MODIFIED METHOD ---
     def _manage_expense_category(self, category_name, expense_class, start_date, end_date):
         """Generic function to manage an expense category."""
         print(f"\n--- Manage {category_name} ---")
         budget = self.current_user.budget
-        current_expenses = [exp for exp in budget.expenses if exp.category == category_name]
 
-        if current_expenses:
-            if get_yes_no_input(f"Do you want to modify or remove an existing {category_name.lower()}?"):
-                while True:
-                    print(f"Existing {category_name}:")
-                    for i, item in enumerate(current_expenses):
-                        expiry_info = f", Expires: {item.expiry_date.strftime('%Y-%m-%d')}" if item.expiry_date else ", No expiry"
-                        print(f"  {i + 1}. {item.name}: ${item.amount:.2f} ({item.frequency}{expiry_info})")
-
-                    try:
-                        choice = input(
-                            f"Enter the number of the {category_name.lower()} to modify/remove, or 'done' to finish: ").lower()
-                        if choice == 'done': break
-                        idx = int(choice) - 1
-                        if 0 <= idx < len(current_expenses):
-                            selected_item = current_expenses[idx]
-                            if get_yes_no_input(f"Do you want to remove this {category_name.lower()}?"):
-                                budget.expenses.remove(selected_item)
-                                print(f"{selected_item.name} removed.")
-                                current_expenses.pop(idx)  # Also remove from local list to keep display consistent
-                                if not current_expenses:
-                                    print(f"No more {category_name.lower()} left to modify.")
-                                    break
-                                continue
-
-                            # Modify logic here... (This part is complex, skipping full implementation for brevity)
-                            print(f"{selected_item.name} update logic not fully implemented yet.")
-                        else:
-                            print("Invalid number.")
-                    except ValueError:
-                        print("Invalid input. Please enter a number or 'done'.")
-
-        if get_yes_no_input(f"Do you want to add a new {category_name.lower()}?"):
+        if get_yes_no_input(f"Do you want to modify or remove an existing item in {category_name}?"):
             while True:
-                name = input(f"Enter the name of the new {category_name.lower()}: ")
+                current_expenses = [exp for exp in budget.expenses if exp.category == category_name]
+                if not current_expenses:
+                    print(f"No more items in {category_name} to modify.")
+                    break
+
+                print(f"Existing {category_name}:")
+                for i, item in enumerate(current_expenses):
+                    expiry_info = f", Expires: {item.expiry_date.strftime('%Y-%m-%d')}" if item.expiry_date else ", No expiry"
+                    print(f"  {i + 1}. {item.name}: ${item.amount:.2f} ({item.frequency}{expiry_info})")
+
+                try:
+                    choice = input(
+                        f"Enter the number of the item to modify/remove, or 'done' to finish: ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+
+                    if 0 <= idx < len(current_expenses):
+                        selected_item = current_expenses[idx]
+                        if get_yes_no_input(f"Do you want to remove this item?"):
+                            budget.expenses.remove(selected_item)
+                            print(f"'{selected_item.name}' removed.")
+                            continue
+
+                        # --- Modification Logic ---
+                        new_name = input(f"Enter new name (or press Enter to keep '{selected_item.name}'): ")
+                        if new_name: selected_item.name = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new amount (or press Enter to keep ${selected_item.amount:.2f})")
+                        if new_amount is not None: selected_item.amount = new_amount
+
+                        if get_yes_no_input("Do you want to update the payment schedule?"):
+                            freq, dates, start_sched = self._get_schedule(start_date, end_date)
+                            if freq:
+                                selected_item.frequency = freq
+                                selected_item.dates = dates
+                                selected_item.start_date_for_schedule = start_sched
+                                print("Schedule updated.")
+
+                        if get_yes_no_input("Do you want to update the expiry date?"):
+                            if get_yes_no_input("Does it have an expiry date?"):
+                                selected_item.expiry_date = get_date_input("Enter the new expiry date")
+                            else:
+                                selected_item.expiry_date = None
+
+                        print(f"'{selected_item.name}' updated.")
+                    else:
+                        print("Invalid number.")
+                except ValueError:
+                    print("Invalid input. Please enter a number or 'done'.")
+
+        if get_yes_no_input(f"Do you want to add a new item to {category_name}?"):
+            while True:
+                name = input(f"Enter the name of the new item: ")
                 amount = get_float_input(f"Enter the amount for {name}")
+                if amount is None: break
+
                 expiry_date = None
                 if get_yes_no_input(f"Does {name} have an expiry date?"):
                     expiry_date = get_date_input(f"Enter the expiry date for {name}")
 
                 frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date)
+                if frequency is None:
+                    print("Item creation cancelled.")
+                    break
 
                 new_expense_data = {
                     'name': name, 'amount': amount, 'frequency': frequency, 'dates': dates,
                     'start_date_for_schedule': start_date_for_schedule, 'expiry_date': expiry_date
                 }
+                # For the generic 'Expense' class, we must specify the category
                 if expense_class == Expense:
                     new_expense_data['category'] = category_name
 
                 budget.expenses.append(expense_class(**new_expense_data))
+                print(f"Added '{name}' to {category_name}.")
 
-                if not get_yes_no_input(f"Add another {category_name.lower()}?"):
+                if not get_yes_no_input(f"Add another item to {category_name}?"):
                     break
 
+    # --- MODIFIED METHOD ---
     def _manage_one_time(self):
         """Manages one-time expenses."""
         print("\n--- Manage One-Time Expenses ---")
         budget = self.current_user.budget
-        one_time_expenses = [exp for exp in budget.expenses if exp.category == 'One-Time']
 
-        if one_time_expenses:
-            if get_yes_no_input("Do you want to modify or remove an existing one-time expense?"):
-                while True:
-                    print("Existing One-Time Expenses:")
-                    for i, item in enumerate(one_time_expenses):
-                        print(f"  {i + 1}. {item.name}: ${item.amount:.2f} on {item.dates[0].strftime('%Y-%m-%d')}")
+        if get_yes_no_input("Do you want to modify or remove an existing one-time expense?"):
+            while True:
+                one_time_expenses = [exp for exp in budget.expenses if exp.category == 'One-Time']
+                if not one_time_expenses:
+                    print("No more one-time expenses to modify.")
+                    break
 
-                    try:
-                        choice = input(
-                            "Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
-                        if choice == 'done': break
-                        idx = int(choice) - 1
-                        if 0 <= idx < len(one_time_expenses):
-                            selected_item = one_time_expenses[idx]
-                            if get_yes_no_input(f"Do you want to remove this expense?"):
-                                budget.expenses.remove(selected_item)
-                                one_time_expenses.pop(idx)
-                                print(f"{selected_item.name} removed.")
-                                if not one_time_expenses:
-                                    break
-                                continue
-                            # Modify logic...
-                        else:
-                            print("Invalid number.")
-                    except ValueError:
-                        print("Invalid input.")
+                print("Existing One-Time Expenses:")
+                for i, item in enumerate(one_time_expenses):
+                    date_str = item.dates[0].strftime('%Y-%m-%d') if item.dates else "N/A"
+                    print(f"  {i + 1}. {item.name}: ${item.amount:.2f} on {date_str}")
+
+                try:
+                    choice = input(
+                        "Enter the number of the expense to modify/remove, or 'done' to finish: ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(one_time_expenses):
+                        selected_item = one_time_expenses[idx]
+                        if get_yes_no_input(f"Do you want to remove this expense?"):
+                            budget.expenses.remove(selected_item)
+                            print(f"'{selected_item.name}' removed.")
+                            continue
+
+                        # --- Modification Logic ---
+                        new_name = input(f"Enter new name (or press Enter to keep '{selected_item.name}'): ")
+                        if new_name: selected_item.name = new_name
+
+                        new_amount = get_float_input(
+                            f"Enter new amount (or press Enter to keep ${selected_item.amount:.2f})")
+                        if new_amount is not None: selected_item.amount = new_amount
+
+                        if get_yes_no_input("Update the date?"):
+                            selected_item.dates = [get_date_input("Enter the new date")]
+
+                        print(f"'{selected_item.name}' updated.")
+                    else:
+                        print("Invalid number.")
+                except ValueError:
+                    print("Invalid input.")
 
         if get_yes_no_input("Do you want to add a new one-time expense?"):
             while True:
                 name = input("Enter the name of the one-time expense or 'done' to finish: ").lower()
                 if name == 'done': break
                 amount = get_float_input(f"Enter the amount for {name}")
+                if amount is None: break
                 date = get_date_input(f"Enter the date for {name}")
                 budget.expenses.append(
                     Expense(name=name, amount=amount, frequency='one-time', dates=[date], category='One-Time'))
                 if not get_yes_no_input("Add another one-time expense?"):
                     break
 
+    # --- NEW METHOD ---
+    def _manage_savings_transfers(self, start_date, end_date):
+        """Manages adding, modifying, and removing savings transfers."""
+        print("\n--- Manage Savings Transfers ---")
+        budget = self.current_user.budget
+
+        if get_yes_no_input("Do you want to modify or remove an existing savings transfer?"):
+            while True:
+                if not budget.savings_transfers:
+                    print("No savings transfers to modify.")
+                    break
+
+                print("Existing Savings Transfers:")
+                for i, trans in enumerate(budget.savings_transfers):
+                    print(f"  {i + 1}. ${trans.amount:.2f} ({trans.frequency}) to '{trans.target}'")
+
+                try:
+                    choice = input("Enter number to modify/remove, or 'done': ").lower()
+                    if choice == 'done': break
+                    idx = int(choice) - 1
+
+                    if 0 <= idx < len(budget.savings_transfers):
+                        selected_trans = budget.savings_transfers[idx]
+                        if get_yes_no_input("Remove this transfer?"):
+                            budget.savings_transfers.pop(idx)
+                            print("Transfer removed.")
+                            continue
+
+                        new_amount = get_float_input(f"New amount (keep ${selected_trans.amount:.2f})")
+                        if new_amount is not None: selected_trans.amount = new_amount
+
+                        if get_yes_no_input("Change target account?"):
+                            new_target = get_savings_target_input("Choose new target", budget.savings_accounts)
+                            if new_target: selected_trans.target = new_target
+
+                        if get_yes_no_input("Update schedule?"):
+                            freq_opts = ['match payday'] if budget.income else None
+                            freq, dates, start_sched = self._get_schedule(start_date, end_date,
+                                                                          extra_freq_options=freq_opts)
+                            if freq:
+                                selected_trans.frequency = freq
+                                selected_trans.dates = dates
+                                selected_trans.start_date_for_schedule = start_sched
+
+                        print("Transfer updated.")
+                    else:
+                        print("Invalid number.")
+                except ValueError:
+                    print("Invalid input.")
+
+        if get_yes_no_input("Add a new savings transfer?"):
+            if not budget.savings_accounts:
+                print("Error: You must create a savings account first.")
+                return
+            while True:
+                amount = get_float_input("Enter transfer amount")
+                if amount is None: break
+
+                target = get_savings_target_input("Which account is this for?", budget.savings_accounts)
+                if target is None: break
+
+                freq_opts = ['match payday'] if budget.income else None
+                frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
+                                                                               extra_freq_options=freq_opts)
+                if frequency is None:
+                    print("Transfer creation cancelled.")
+                    break
+
+                # Create a name for the transfer for consistency with FinancialItem
+                name = f"Transfer to {target}"
+                budget.savings_transfers.append(
+                    SavingsTransfer(name=name, amount=amount, frequency=frequency, target=target, dates=dates,
+                                    start_date_for_schedule=start_date_for_schedule)
+                )
+                print("Savings transfer added.")
+
+                if not get_yes_no_input("Add another transfer?"):
+                    break
+
+    # --- MODIFIED METHOD ---
     def _get_schedule(self, start_date, end_date, extra_freq_options=None):
         """Helper to get schedule details for any financial item."""
         frequency = None
         dates = []
         start_date_for_schedule = None
 
-        if get_yes_no_input("Do you want to set a periodic schedule?"):
+        if get_yes_no_input("Do you want to set a periodic schedule? (e.g., weekly, monthly)"):
             frequency = get_frequency_input("How often does this occur?", extra_options=extra_freq_options)
-            if frequency in ['match payday']:  # Handle special cases
-                if frequency == 'match payday':
-                    if self.current_user.budget.income and self.current_user.budget.income.dates:
-                        dates = self.current_user.budget.income.dates
-                        print("Schedule set to match income dates.")
-                    else:
-                        print("Cannot match payday because income is not set up.")
-                        frequency = None  # Reset frequency
+            if not frequency: return None, [], None
+
+            if frequency == 'match payday':
+                if self.current_user.budget.income and self.current_user.budget.income.dates:
+                    dates = self.current_user.budget.income.dates
+                    print("Schedule set to match income dates.")
+                else:
+                    print("Cannot match payday because income is not set up. Please set schedule manually.")
+                    return None, [], None  # Force user to retry
             elif frequency == 'bi-monthly':
                 start_date_for_schedule = get_date_input("Enter the start date for this schedule")
                 dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
-            elif frequency != "one-time":
+            elif frequency == "one-time":
+                dates.append(get_date_input("Enter the specific date for this item"))
+            else:  # All other periodic frequencies
                 start_date_for_schedule = get_date_input("Enter the start date for this schedule")
                 dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
-            else:  # one-time
-                dates.append(get_date_input("Enter the specific date for this item"))
         else:
-            frequency = "manual"
-            dates = get_multiple_dates("Enter a specific date")
+            print("You've chosen to enter specific dates manually.")
+            dates = get_multiple_dates("Enter a specific date (or 'done' to finish)")
+            if dates:
+                frequency = "manual"
+            else:
+                print("No dates entered.")
+                return None, [], None
 
         return frequency, dates, start_date_for_schedule
 
