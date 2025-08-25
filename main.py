@@ -180,17 +180,20 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
     return [d for d in dates if d >= datetime.now().date()]
 
 
-def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set):
+def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set, adjust_for_holidays=True):
     """
-    Generates a list of recurring dates every two months, adjusting for weekends/holidays.
+    Generates a list of recurring dates every two months.
+    Date adjustment for weekends/holidays is now conditional.
     """
     dates = []
     current_date = start_date
 
     while current_date <= end_date:
         adjusted_date = current_date
-        while not is_business_day(adjusted_date, holidays_set):
-            adjusted_date -= timedelta(days=1)
+        # --- MODIFIED LOGIC ---
+        if adjust_for_holidays:
+            while not is_business_day(adjusted_date, holidays_set):
+                adjusted_date -= timedelta(days=1)
         dates.append(adjusted_date)
 
         new_month = current_date.month + 2
@@ -204,10 +207,10 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
     return [d for d in dates if d >= datetime.now().date()]
 
 
-def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
+def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=True):
     """
-    Generates a list of recurring dates based on frequency, adjusting for weekends/holidays.
-    The calculation for the next date is based on the unadjusted date to prevent drift.
+    Generates a list of recurring dates based on frequency.
+    Date adjustment for weekends/holidays is now conditional.
     """
     dates = []
     current_date = start_date
@@ -215,12 +218,16 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None):
 
     while current_date <= end_date:
         adjusted_date = current_date
-        while not is_business_day(adjusted_date, holidays_set):
-            adjusted_date -= timedelta(days=1)
+        # --- MODIFIED LOGIC ---
+        # Only adjust the date if the flag is True
+        if adjust_for_holidays:
+            while not is_business_day(adjusted_date, holidays_set):
+                adjusted_date -= timedelta(days=1)
 
         if adjusted_date >= datetime.now().date():
             dates.append(adjusted_date)
 
+        # Calculation for the next date remains the same
         if frequency == 'weekly':
             current_date += timedelta(weeks=1)
         elif frequency == 'bi-weekly':
@@ -460,7 +467,7 @@ class Budget:
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
-        # Recalculate Income
+        # Recalculate Income (always adjust)
         if self.income:
             income_freq = self.income.frequency
             if income_freq == 'twice-monthly':
@@ -468,24 +475,32 @@ class Budget:
             elif self.income.start_date_for_schedule:
                 original_start = self.income.start_date_for_schedule
                 if income_freq == 'bi-monthly':
-                    self.income.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays)
+                    self.income.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
+                                                                                    adjust_for_holidays=True)
                 elif income_freq not in ['one-time', 'manual']:
-                    self.income.dates = get_recurring_dates(original_start, end_date, income_freq, holidays)
+                    self.income.dates = get_recurring_dates(original_start, end_date, income_freq, holidays,
+                                                            adjust_for_holidays=True)
 
         # Recalculate Expenses & Savings
         items_to_recalculate = self.expenses + self.savings_transfers
         for item in items_to_recalculate:
             freq = item.frequency
+
+            # --- MODIFIED LOGIC ---
+            # Adjust dates for SavingsTransfers, but not for Expenses.
+            should_adjust = isinstance(item, SavingsTransfer)
+
             if freq == 'match payday' and self.income:
                 item.dates = self.income.dates
             elif item.start_date_for_schedule:
                 original_start = item.start_date_for_schedule
                 if freq == 'bi-monthly':
-                    item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays)
+                    item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
+                                                                             adjust_for_holidays=should_adjust)
                 elif freq not in ['one-time', 'manual', 'weekly']:
-                    item.dates = get_recurring_dates(original_start, end_date, freq, holidays)
+                    item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
+                                                     adjust_for_holidays=should_adjust)
         print("Schedules recalculated.")
-
 
 class User:
     """Manages user data, including loading and saving their budget."""
@@ -959,7 +974,6 @@ class BudgetPlannerApp:
                 else:
                     break
 
-    # --- MODIFIED METHOD ---
     def _manage_income(self, start_date, end_date):
         """Handles the logic for adding or updating income information."""
         print("\n--- Income Information ---")
@@ -979,23 +993,25 @@ class BudgetPlannerApp:
             if new_freq is not None:
                 budget.income.frequency = new_freq
 
-            # Recalculate dates if frequency or schedule start date changes
             if new_freq is not None or get_yes_no_input("Do you want to update the schedule start date?"):
                 if budget.income.frequency == 'twice-monthly':
                     budget.income.dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
                     budget.income.start_date_for_schedule = None
+                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
                 elif budget.income.frequency == 'bi-monthly':
                     start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
                     budget.income.start_date_for_schedule = start_date_for_schedule
                     budget.income.dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date,
-                                                                                      self.holidays)
+                                                                                      self.holidays,
+                                                                                      adjust_for_holidays=True)
                 else:
                     start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
                     budget.income.start_date_for_schedule = start_date_for_schedule
                     budget.income.dates = get_recurring_dates(start_date_for_schedule, end_date,
-                                                              budget.income.frequency, self.holidays)
+                                                              budget.income.frequency, self.holidays,
+                                                              adjust_for_holidays=True)
 
-        else:  # No income exists, set it up
+        else:
             amount = get_float_input("Enter your income amount after taxes")
             if amount is None: return
 
@@ -1007,12 +1023,15 @@ class BudgetPlannerApp:
 
             if frequency == 'twice-monthly':
                 dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
+            # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
             elif frequency == 'bi-monthly':
                 start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
-                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
+                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays,
+                                                                    adjust_for_holidays=True)
             else:
                 start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
-                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
+                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays,
+                                            adjust_for_holidays=True)
 
             budget.income = Income(amount=amount, frequency=frequency, dates=dates,
                                    start_date_for_schedule=start_date_for_schedule)
@@ -1203,12 +1222,9 @@ class BudgetPlannerApp:
         print("\n--- Manage Savings Transfers ---")
         budget = self.current_user.budget
 
-        # --- MODIFIED LOGIC ---
-        # Only ask to modify if transfers exist.
         if budget.savings_transfers:
             if get_yes_no_input("Do you want to modify or remove an existing savings transfer?"):
                 while True:
-                    # Re-fetch inside loop
                     if not budget.savings_transfers:
                         print("No savings transfers to modify.")
                         break
@@ -1238,8 +1254,10 @@ class BudgetPlannerApp:
 
                             if get_yes_no_input("Update schedule?"):
                                 freq_opts = ['match payday'] if budget.income else None
+                                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
                                 freq, dates, start_sched = self._get_schedule(start_date, end_date,
-                                                                              extra_freq_options=freq_opts)
+                                                                              extra_freq_options=freq_opts,
+                                                                              adjust_for_holidays=True)
                                 if freq:
                                     selected_trans.frequency = freq
                                     selected_trans.dates = dates
@@ -1251,7 +1269,6 @@ class BudgetPlannerApp:
                     except ValueError:
                         print("Invalid input.")
 
-        # This 'add' part is always asked.
         if get_yes_no_input("Add a new savings transfer?"):
             if not budget.savings_accounts:
                 print("Error: You must create a savings account first.")
@@ -1264,8 +1281,10 @@ class BudgetPlannerApp:
                 if target is None: break
 
                 freq_opts = ['match payday'] if budget.income else None
+                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
                 frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
-                                                                               extra_freq_options=freq_opts)
+                                                                               extra_freq_options=freq_opts,
+                                                                               adjust_for_holidays=True)
                 if frequency is None:
                     print("Transfer creation cancelled.")
                     break
@@ -1280,8 +1299,7 @@ class BudgetPlannerApp:
                 if not get_yes_no_input("Add another transfer?"):
                     break
 
-    # --- MODIFIED METHOD ---
-    def _get_schedule(self, start_date, end_date, extra_freq_options=None):
+    def _get_schedule(self, start_date, end_date, extra_freq_options=None, adjust_for_holidays=False):
         """Helper to get schedule details for any financial item."""
         frequency = None
         dates = []
@@ -1297,15 +1315,18 @@ class BudgetPlannerApp:
                     print("Schedule set to match income dates.")
                 else:
                     print("Cannot match payday because income is not set up. Please set schedule manually.")
-                    return None, [], None  # Force user to retry
+                    return None, [], None
+                    # --- MODIFIED LOGIC --- (added adjust_for_holidays parameter to the call)
             elif frequency == 'bi-monthly':
                 start_date_for_schedule = get_date_input("Enter the start date for this schedule")
-                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays)
+                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays,
+                                                                    adjust_for_holidays=adjust_for_holidays)
             elif frequency == "one-time":
                 dates.append(get_date_input("Enter the specific date for this item"))
-            else:  # All other periodic frequencies
+            else:
                 start_date_for_schedule = get_date_input("Enter the start date for this schedule")
-                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays)
+                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays,
+                                            adjust_for_holidays=adjust_for_holidays)
         else:
             print("You've chosen to enter specific dates manually.")
             dates = get_multiple_dates("Enter a specific date (or 'done' to finish)")
