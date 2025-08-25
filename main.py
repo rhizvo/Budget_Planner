@@ -207,7 +207,7 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
     return [d for d in dates if d >= datetime.now().date()]
 
 
-def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=True):
+def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=False):
     """
     Generates a list of recurring dates based on frequency.
     Date adjustment for weekends/holidays is now conditional.
@@ -486,7 +486,7 @@ class Budget:
         for item in items_to_recalculate:
             freq = item.frequency
 
-            should_adjust = isinstance(item, SavingsTransfer)
+            should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
             if freq == 'match payday' and self.income:
                 item.dates = self.income.dates
@@ -495,7 +495,7 @@ class Budget:
                 if freq == 'bi-monthly':
                     item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
                                                                              adjust_for_holidays=should_adjust)
-                elif freq not in ['one-time', 'manual', 'weekly']:
+                elif freq not in ['one-time', 'manual']:
                     item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
                                                      adjust_for_holidays=should_adjust)
 
@@ -1264,10 +1264,9 @@ class BudgetPlannerApp:
 
                             if get_yes_no_input("Update schedule?"):
                                 freq_opts = ['match payday'] if budget.income else None
-                                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
                                 freq, dates, start_sched = self._get_schedule(start_date, end_date,
                                                                               extra_freq_options=freq_opts,
-                                                                              adjust_for_holidays=True)
+                                                                              adjust_for_holidays=False)
                                 if freq:
                                     selected_trans.frequency = freq
                                     selected_trans.dates = dates
@@ -1358,7 +1357,7 @@ class BudgetPlannerApp:
         holidays = self.holidays  # The app class has access to the loaded holidays
 
         # Determine if dates should be adjusted (only for savings, not expenses)
-        should_adjust = isinstance(item, SavingsTransfer)
+        should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
         # Generate the full list of potential dates
         if freq == 'match payday' and self.current_user.budget.income:
@@ -1369,7 +1368,7 @@ class BudgetPlannerApp:
                 item.dates = calculate_bi_monthly_dates_every_two_months(
                     original_start, end_date, holidays, adjust_for_holidays=should_adjust
                 )
-            elif freq not in ['one-time', 'manual', 'weekly']:
+            elif freq not in ['one-time', 'manual']:
                 item.dates = get_recurring_dates(
                     original_start, end_date, freq, holidays, adjust_for_holidays=should_adjust
                 )
