@@ -467,7 +467,7 @@ class Budget:
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
-        # Recalculate Income (always adjust)
+        # Recalculate Income (always adjust, no expiry)
         if self.income:
             income_freq = self.income.frequency
             if income_freq == 'twice-monthly':
@@ -486,8 +486,6 @@ class Budget:
         for item in items_to_recalculate:
             freq = item.frequency
 
-            # --- MODIFIED LOGIC ---
-            # Adjust dates for SavingsTransfers, but not for Expenses.
             should_adjust = isinstance(item, SavingsTransfer)
 
             if freq == 'match payday' and self.income:
@@ -500,6 +498,12 @@ class Budget:
                 elif freq not in ['one-time', 'manual', 'weekly']:
                     item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
                                                      adjust_for_holidays=should_adjust)
+
+            # --- NEW LOGIC ---
+            # After calculating dates for any item, filter them by its expiry date if it has one.
+            if hasattr(item, 'expiry_date') and item.expiry_date:
+                item.dates = [d for d in item.dates if d <= item.expiry_date]
+
         print("Schedules recalculated.")
 
 class User:
@@ -1066,15 +1070,11 @@ class BudgetPlannerApp:
         print(f"\n--- Manage {category_name} ---")
         budget = self.current_user.budget
 
-        # First, get the relevant items
         current_expenses = [exp for exp in budget.expenses if exp.category == category_name]
 
-        # --- MODIFIED LOGIC ---
-        # Only ask to modify if items actually exist.
         if current_expenses:
             if get_yes_no_input(f"Do you want to modify or remove an existing item in {category_name}?"):
                 while True:
-                    # Re-fetch inside loop in case an item is deleted
                     current_expenses_loop = [exp for exp in budget.expenses if exp.category == category_name]
                     if not current_expenses_loop:
                         print(f"No more items in {category_name} to modify.")
@@ -1098,6 +1098,8 @@ class BudgetPlannerApp:
                                 print(f"'{selected_item.name}' removed.")
                                 continue
 
+                            # --- MODIFIED LOGIC ---
+                            # First, update all properties of the item
                             new_name = input(f"Enter new name (or press Enter to keep '{selected_item.name}'): ")
                             if new_name: selected_item.name = new_name
 
@@ -1106,12 +1108,14 @@ class BudgetPlannerApp:
                             if new_amount is not None: selected_item.amount = new_amount
 
                             if get_yes_no_input("Do you want to update the payment schedule?"):
-                                freq, dates, start_sched = self._get_schedule(start_date, end_date)
+                                # For expenses, we don't adjust for holidays
+                                freq, dates, start_sched = self._get_schedule(start_date, end_date,
+                                                                              adjust_for_holidays=False)
                                 if freq:
                                     selected_item.frequency = freq
+                                    # Temporarily assign dates; they will be recalculated and filtered next
                                     selected_item.dates = dates
                                     selected_item.start_date_for_schedule = start_sched
-                                    print("Schedule updated.")
 
                             if get_yes_no_input("Do you want to update the expiry date?"):
                                 if get_yes_no_input("Does it have an expiry date?"):
@@ -1119,13 +1123,14 @@ class BudgetPlannerApp:
                                 else:
                                     selected_item.expiry_date = None
 
+                            # Second, recalculate the schedule based on all updated properties
+                            self._update_single_item_schedule(selected_item, start_date, end_date)
                             print(f"'{selected_item.name}' updated.")
                         else:
                             print("Invalid number.")
                     except ValueError:
                         print("Invalid input. Please enter a number or 'done'.")
 
-        # This 'add' part is always asked.
         if get_yes_no_input(f"Do you want to add a new item to {category_name}?"):
             while True:
                 name = input(f"Enter the name of the new item: ")
@@ -1136,10 +1141,15 @@ class BudgetPlannerApp:
                 if get_yes_no_input(f"Does {name} have an expiry date?"):
                     expiry_date = get_date_input(f"Enter the expiry date for {name}")
 
-                frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date)
+                frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
+                                                                               adjust_for_holidays=False)
                 if frequency is None:
                     print("Item creation cancelled.")
                     break
+
+                # Filter dates based on expiry date upon creation
+                if expiry_date:
+                    dates = [d for d in dates if d <= expiry_date]
 
                 new_expense_data = {
                     'name': name, 'amount': amount, 'frequency': frequency, 'dates': dates,
@@ -1337,6 +1347,37 @@ class BudgetPlannerApp:
                 return None, [], None
 
         return frequency, dates, start_date_for_schedule
+
+    def _update_single_item_schedule(self, item, start_date, end_date):
+        """
+        Calculates and filters the date schedule for a single financial item.
+        This ensures the date list is correct after any modification and respects the expiry date.
+        """
+        # Step 1: Regenerate the full list of dates for the budget period
+        freq = item.frequency
+        holidays = self.holidays  # The app class has access to the loaded holidays
+
+        # Determine if dates should be adjusted (only for savings, not expenses)
+        should_adjust = isinstance(item, SavingsTransfer)
+
+        # Generate the full list of potential dates
+        if freq == 'match payday' and self.current_user.budget.income:
+            item.dates = self.current_user.budget.income.dates
+        elif item.start_date_for_schedule:
+            original_start = item.start_date_for_schedule
+            if freq == 'bi-monthly':
+                item.dates = calculate_bi_monthly_dates_every_two_months(
+                    original_start, end_date, holidays, adjust_for_holidays=should_adjust
+                )
+            elif freq not in ['one-time', 'manual', 'weekly']:
+                item.dates = get_recurring_dates(
+                    original_start, end_date, freq, holidays, adjust_for_holidays=should_adjust
+                )
+
+        # Step 2: Filter the regenerated list based on the item's expiry date
+        # This check is safe for SavingsTransfer as it won't have the attribute
+        if hasattr(item, 'expiry_date') and item.expiry_date:
+            item.dates = [d for d in item.dates if d <= item.expiry_date]
 
 
 if __name__ == "__main__":
