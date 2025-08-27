@@ -477,6 +477,7 @@ class Budget:
                 if income_freq == 'bi-monthly':
                     self.income.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
                                                                                     adjust_for_holidays=True)
+                # --- MODIFIED LOGIC --- (Removed 'weekly' from the list)
                 elif income_freq not in ['one-time', 'manual']:
                     self.income.dates = get_recurring_dates(original_start, end_date, income_freq, holidays,
                                                             adjust_for_holidays=True)
@@ -486,8 +487,6 @@ class Budget:
         for item in items_to_recalculate:
             freq = item.frequency
 
-            # --- MODIFIED LOGIC ---
-            # Adjust only if it's a SavingsTransfer AND its frequency is 'match payday'.
             should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
             if freq == 'match payday' and self.income:
@@ -497,7 +496,8 @@ class Budget:
                 if freq == 'bi-monthly':
                     item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
                                                                              adjust_for_holidays=should_adjust)
-                elif freq not in ['one-time', 'manual', 'weekly']:
+                # --- MODIFIED LOGIC --- (Removed 'weekly' from the list)
+                elif freq not in ['one-time', 'manual']:
                     item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
                                                      adjust_for_holidays=should_adjust)
 
@@ -753,7 +753,7 @@ class BudgetPlannerApp:
             elif choice == '2':
                 self._manage_income(start_date, end_date)
             elif choice == '3':
-                self._manage_groceries()
+                self._manage_groceries(start_date, end_date)
             elif choice == '4':
                 self._manage_expense_category("Bills", Bill, start_date, end_date)
             elif choice == '5':
@@ -822,13 +822,15 @@ class BudgetPlannerApp:
                 should_apply_expense_this_week = False
                 if item.expiry_date and week_start > item.expiry_date:
                     continue
-                if item.frequency == 'weekly':
-                    should_apply_expense_this_week = True
-                elif item.dates:
+
+                # --- MODIFIED LOGIC ---
+                # Removed the special case for 'weekly'. All frequencies now rely on the 'dates' list.
+                if item.dates:
                     for expense_date in item.dates:
                         if week_start <= expense_date <= week_end:
                             should_apply_expense_this_week = True
                             break
+
                 if should_apply_expense_this_week:
                     key_name = f"{item.category}: {item.name}"
                     weekly_expenses_breakdown[key_name] += item.amount
@@ -836,9 +838,8 @@ class BudgetPlannerApp:
 
             for s_transfer in all_savings_to_process:
                 should_apply_savings_this_week = False
-                if s_transfer.frequency == 'weekly':
-                    should_apply_savings_this_week = True
-                elif s_transfer.dates:
+                # We can remove the 'weekly' special case here too for consistency, though it had no effect
+                if s_transfer.dates:
                     for s_date in s_transfer.dates:
                         if week_start <= s_date <= week_end:
                             should_apply_savings_this_week = True
@@ -895,7 +896,7 @@ class BudgetPlannerApp:
 
         self._manage_balances()
         self._manage_income(start_date, end_date)
-        self._manage_groceries()
+        self._manage_groceries(start_date, end_date)
         self._manage_expense_category("Bills", Bill, start_date, end_date)
         self._manage_expense_category("Streaming Services", StreamingService, start_date, end_date)
         self._manage_expense_category("Misc Monthly", Expense, start_date, end_date)
@@ -1048,7 +1049,7 @@ class BudgetPlannerApp:
             for date in budget.income.dates:
                 print(f"- {date.strftime('%Y-%m-%d')}")
 
-    def _manage_groceries(self):
+    def _manage_groceries(self, start_date, end_date):
         """Handles the logic for managing grocery expenses."""
         print("\n--- Manage Your Groceries ---")
         budget = self.current_user.budget
@@ -1056,15 +1057,34 @@ class BudgetPlannerApp:
 
         if grocery_expense:
             print(f"Current typical weekly grocery expense: ${grocery_expense.amount:.2f}")
-            if get_yes_no_input("Do you want to update your weekly grocery expense?"):
-                new_amount = get_float_input("Enter your new typical weekly grocery expense")
+            if get_yes_no_input("Do you want to update your grocery expense details?"):
+                new_amount = get_float_input(f"Enter new amount (or press Enter to keep ${grocery_expense.amount:.2f})")
                 if new_amount is not None:
                     grocery_expense.amount = new_amount
+
+                if get_yes_no_input("Do you want to update the schedule (e.g., the start date)?"):
+                    start_date_for_schedule = get_date_input("Enter the first date for your weekly grocery expense")
+                    dates = get_recurring_dates(start_date_for_schedule, end_date, 'weekly', self.holidays,
+                                                adjust_for_holidays=False)
+                    grocery_expense.start_date_for_schedule = start_date_for_schedule
+                    grocery_expense.dates = dates
+                    print("Grocery schedule updated.")
+
         elif get_yes_no_input("Do you have a regular grocery expense?"):
             amount = get_float_input("Enter your typical weekly grocery expense")
             if amount is not None:
+                # --- MODIFIED LOGIC ---
+                # Now we properly ask for a start date for the weekly schedule
+                start_date_for_schedule = get_date_input(
+                    "Enter the first date for this weekly expense (e.g., next Saturday)")
+                dates = get_recurring_dates(start_date_for_schedule, end_date, 'weekly', self.holidays,
+                                            adjust_for_holidays=False)
+
                 budget.expenses.append(
-                    Expense(name='Groceries', amount=amount, frequency='weekly', category='Groceries'))
+                    Expense(name='Groceries', amount=amount, frequency='weekly', category='Groceries',
+                            dates=dates, start_date_for_schedule=start_date_for_schedule)
+                )
+                print("Weekly grocery expense has been set up.")
 
     def _manage_expense_category(self, category_name, expense_class, start_date, end_date):
         """Generic function to manage an expense category."""
