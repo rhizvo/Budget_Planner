@@ -358,12 +358,32 @@ class StreamingService(Expense):
 
 
 class Income(FinancialItem):
-    """Represents an income source."""
+    """Represents an income source, now with an optional expiry date."""
 
-    def __init__(self, **kwargs):
-        # Default name if not provided
-        kwargs.setdefault('name', 'Primary Income')
-        super().__init__(**kwargs)
+    def __init__(self, name="Primary Income", amount=0.0, frequency=None, dates=None, start_date_for_schedule=None,
+                 expiry_date=None):
+        super().__init__(name, amount, frequency, dates, start_date_for_schedule)
+        self.expiry_date = expiry_date
+
+    def to_dict(self):
+        data = super().to_dict()
+        data['expiry_date'] = self.expiry_date.isoformat() if self.expiry_date else None
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        init_data = data.copy()
+        init_data['dates'] = [datetime.fromisoformat(d).date() for d in init_data.get('dates', [])]
+        if init_data.get('start_date_for_schedule'):
+            init_data['start_date_for_schedule'] = datetime.fromisoformat(init_data['start_date_for_schedule']).date()
+        if init_data.get('expiry_date'):
+            init_data['expiry_date'] = datetime.fromisoformat(init_data['expiry_date']).date()
+
+        # Clean up keys not in the constructor
+        if 'category' in init_data: del init_data['category']
+        if 'target' in init_data: del init_data['target']
+
+        return cls(**init_data)
 
 
 class SavingsTransfer(FinancialItem):
@@ -467,22 +487,34 @@ class Budget:
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
-        # Recalculate Income (always adjust, no expiry)
         if self.income:
             income_freq = self.income.frequency
-            if income_freq == 'twice-monthly':
-                self.income.dates = calculate_twice_monthly_dates(start_date, end_date, holidays)
+
+            # Case 1: Twice-monthly frequency
+            if income_freq == 'twice-monthly' and self.income.start_date_for_schedule:
+                # Use the user-provided start date for calculation
+                calc_start_date = self.income.start_date_for_schedule
+                self.income.dates = calculate_twice_monthly_dates(calc_start_date, end_date, holidays)
+
+            # Case 2: All other frequencies that rely on a saved start date
             elif self.income.start_date_for_schedule:
                 original_start = self.income.start_date_for_schedule
-                if income_freq == 'bi-monthly':
-                    self.income.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
-                                                                                    adjust_for_holidays=True)
-                # --- MODIFIED LOGIC --- (Removed 'weekly' from the list)
-                elif income_freq not in ['one-time', 'manual']:
-                    self.income.dates = get_recurring_dates(original_start, end_date, income_freq, holidays,
-                                                            adjust_for_holidays=True)
 
-        # Recalculate Expenses & Savings
+                if income_freq == 'bi-monthly':
+                    self.income.dates = calculate_bi_monthly_dates_every_two_months(
+                        original_start, end_date, holidays, adjust_for_holidays=True)
+                elif income_freq not in ['one-time', 'manual']:
+                    self.income.dates = get_recurring_dates(
+                        original_start, end_date, income_freq, holidays, adjust_for_holidays=True)
+            else:
+                self.income.dates = []
+
+            # --- NEW LOGIC ---
+            # After calculating dates, filter them by the income's expiry date if it exists.
+            if self.income.expiry_date:
+                self.income.dates = [d for d in self.income.dates if d <= self.income.expiry_date]
+
+        # Recalculate Expenses & Savings (This logic remains correct)
         items_to_recalculate = self.expenses + self.savings_transfers
         for item in items_to_recalculate:
             freq = item.frequency
@@ -496,12 +528,10 @@ class Budget:
                 if freq == 'bi-monthly':
                     item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
                                                                              adjust_for_holidays=should_adjust)
-                # --- MODIFIED LOGIC --- (Removed 'weekly' from the list)
                 elif freq not in ['one-time', 'manual']:
                     item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
                                                      adjust_for_holidays=should_adjust)
 
-            # After calculating dates for any item, filter them by its expiry date if it has one.
             if hasattr(item, 'expiry_date') and item.expiry_date:
                 item.dates = [d for d in item.dates if d <= item.expiry_date]
 
@@ -984,39 +1014,41 @@ class BudgetPlannerApp:
         """Handles the logic for adding or updating income information."""
         print("\n--- Income Information ---")
         budget = self.current_user.budget
+        income_item = budget.income
 
-        if budget.income and budget.income.amount > 0:
-            print(f"Current income: ${budget.income.amount:.2f} ({budget.income.frequency})")
+        # --- UPDATE/MODIFY EXISTING INCOME ---
+        if income_item and income_item.amount > 0:
+            print(f"Current income: ${income_item.amount:.2f} ({income_item.frequency})")
             if not get_yes_no_input("Do you want to update your income information?"):
                 return
 
-            new_amount = get_float_input(f"Enter new income (or press Enter to keep ${budget.income.amount:.2f})")
-            new_freq = get_frequency_input(f"Enter new frequency (or press Enter to keep '{budget.income.frequency}')",
-                                           extra_options=['twice-monthly'])
+            new_amount = get_float_input(f"Enter new income (or press Enter to keep ${income_item.amount:.2f})")
+            if new_amount is not None: income_item.amount = new_amount
 
-            if new_amount is not None:
-                budget.income.amount = new_amount
-            if new_freq is not None:
-                budget.income.frequency = new_freq
+            if get_yes_no_input("Do you want to update the frequency or schedule start date?"):
+                new_freq = get_frequency_input(
+                    f"Enter new frequency (or press Enter to keep '{income_item.frequency}')",
+                    extra_options=['twice-monthly'])
+                if new_freq is not None: income_item.frequency = new_freq
 
-            if new_freq is not None or get_yes_no_input("Do you want to update the schedule start date?"):
-                if budget.income.frequency == 'twice-monthly':
-                    budget.income.dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
-                    budget.income.start_date_for_schedule = None
-                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
-                elif budget.income.frequency == 'bi-monthly':
-                    start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
-                    budget.income.start_date_for_schedule = start_date_for_schedule
-                    budget.income.dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date,
-                                                                                      self.holidays,
-                                                                                      adjust_for_holidays=True)
+                # Use the existing start date as a default for the prompt
+                prompt = "Enter the date of your next upcoming paycheck"
+                if income_item.start_date_for_schedule:
+                    prompt += f" (or press Enter to keep {income_item.start_date_for_schedule.strftime('%Y-%m-%d')})"
+
+                new_start_date = get_date_input(prompt)
+                if new_start_date is not None: income_item.start_date_for_schedule = new_start_date
+
+            if get_yes_no_input("Do you want to update the income end date?"):
+                if get_yes_no_input("Does this income have an end date?"):
+                    income_item.expiry_date = get_date_input("Enter the income end date")
                 else:
-                    start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
-                    budget.income.start_date_for_schedule = start_date_for_schedule
-                    budget.income.dates = get_recurring_dates(start_date_for_schedule, end_date,
-                                                              budget.income.frequency, self.holidays,
-                                                              adjust_for_holidays=True)
+                    income_item.expiry_date = None
 
+            # After all changes, perform a full recalculation of the income schedule
+            self._update_single_item_schedule(income_item, start_date, end_date)
+
+        # --- ADD NEW INCOME ---
         else:
             amount = get_float_input("Enter your income amount after taxes")
             if amount is None: return
@@ -1024,30 +1056,29 @@ class BudgetPlannerApp:
             frequency = get_frequency_input("How often do you receive this income?", extra_options=['twice-monthly'])
             if frequency is None: return
 
-            start_date_for_schedule = None
-            dates = []
+            start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
+            if start_date_for_schedule is None: return
 
-            if frequency == 'twice-monthly':
-                dates = calculate_twice_monthly_dates(start_date, end_date, self.holidays)
-            # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
-            elif frequency == 'bi-monthly':
-                start_date_for_schedule = get_date_input("Enter the start date for this bi-monthly income")
-                dates = calculate_bi_monthly_dates_every_two_months(start_date_for_schedule, end_date, self.holidays,
-                                                                    adjust_for_holidays=True)
-            else:
-                start_date_for_schedule = get_date_input("Enter the date of your next upcoming paycheck")
-                dates = get_recurring_dates(start_date_for_schedule, end_date, frequency, self.holidays,
-                                            adjust_for_holidays=True)
+            expiry_date = None
+            if get_yes_no_input("Does this income have an end date (e.g., end of contract)?"):
+                expiry_date = get_date_input("Enter the income end date")
 
-            budget.income = Income(amount=amount, frequency=frequency, dates=dates,
-                                   start_date_for_schedule=start_date_for_schedule)
+            # Create the new income object
+            new_income = Income(amount=amount, frequency=frequency,
+                                start_date_for_schedule=start_date_for_schedule, expiry_date=expiry_date)
+
+            # Calculate its schedule
+            self._update_single_item_schedule(new_income, start_date, end_date)
+            budget.income = new_income
 
         if not budget.income.dates:
             print("Warning: No pay dates were generated for the budget period.")
         else:
             print("\nCalculated Pay Dates for your budget period:")
-            for date in budget.income.dates:
+            for date in budget.income.dates[:12]:
                 print(f"- {date.strftime('%Y-%m-%d')}")
+            if len(budget.income.dates) > 12:
+                print(f"... and {len(budget.income.dates) - 12} more.")
 
     def _manage_groceries(self, start_date, end_date):
         """Handles the logic for managing grocery expenses."""
