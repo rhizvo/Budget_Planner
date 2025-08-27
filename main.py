@@ -486,6 +486,8 @@ class Budget:
         for item in items_to_recalculate:
             freq = item.frequency
 
+            # --- MODIFIED LOGIC ---
+            # Adjust only if it's a SavingsTransfer AND its frequency is 'match payday'.
             should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
             if freq == 'match payday' and self.income:
@@ -495,11 +497,10 @@ class Budget:
                 if freq == 'bi-monthly':
                     item.dates = calculate_bi_monthly_dates_every_two_months(original_start, end_date, holidays,
                                                                              adjust_for_holidays=should_adjust)
-                elif freq not in ['one-time', 'manual']:
+                elif freq not in ['one-time', 'manual', 'weekly']:
                     item.dates = get_recurring_dates(original_start, end_date, freq, holidays,
                                                      adjust_for_holidays=should_adjust)
 
-            # --- NEW LOGIC ---
             # After calculating dates for any item, filter them by its expiry date if it has one.
             if hasattr(item, 'expiry_date') and item.expiry_date:
                 item.dates = [d for d in item.dates if d <= item.expiry_date]
@@ -1264,6 +1265,9 @@ class BudgetPlannerApp:
 
                             if get_yes_no_input("Update schedule?"):
                                 freq_opts = ['match payday'] if budget.income else None
+                                # --- MODIFIED LOGIC ---
+                                # We set adjust_for_holidays=False because only 'match payday' should adjust,
+                                # and that case is handled automatically inside _get_schedule.
                                 freq, dates, start_sched = self._get_schedule(start_date, end_date,
                                                                               extra_freq_options=freq_opts,
                                                                               adjust_for_holidays=False)
@@ -1271,6 +1275,9 @@ class BudgetPlannerApp:
                                     selected_trans.frequency = freq
                                     selected_trans.dates = dates
                                     selected_trans.start_date_for_schedule = start_sched
+
+                                # After changes, we must recalculate the item's schedule
+                                self._update_single_item_schedule(selected_trans, start_date, end_date)
 
                             print("Transfer updated.")
                         else:
@@ -1290,19 +1297,24 @@ class BudgetPlannerApp:
                 if target is None: break
 
                 freq_opts = ['match payday'] if budget.income else None
-                # --- MODIFIED LOGIC --- (added adjust_for_holidays=True)
+                # --- MODIFIED LOGIC ---
+                # This should also be False.
                 frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
                                                                                extra_freq_options=freq_opts,
-                                                                               adjust_for_holidays=True)
+                                                                               adjust_for_holidays=False)
                 if frequency is None:
                     print("Transfer creation cancelled.")
                     break
 
                 name = f"Transfer to {target}"
-                budget.savings_transfers.append(
-                    SavingsTransfer(name=name, amount=amount, frequency=frequency, target=target, dates=dates,
-                                    start_date_for_schedule=start_date_for_schedule)
-                )
+                new_transfer = SavingsTransfer(name=name, amount=amount, frequency=frequency, target=target,
+                                               dates=dates,
+                                               start_date_for_schedule=start_date_for_schedule)
+
+                # Recalculate just in case 'match payday' was selected
+                self._update_single_item_schedule(new_transfer, start_date, end_date)
+
+                budget.savings_transfers.append(new_transfer)
                 print("Savings transfer added.")
 
                 if not get_yes_no_input("Add another transfer?"):
@@ -1356,7 +1368,8 @@ class BudgetPlannerApp:
         freq = item.frequency
         holidays = self.holidays  # The app class has access to the loaded holidays
 
-        # Determine if dates should be adjusted (only for savings, not expenses)
+        # --- MODIFIED LOGIC ---
+        # Determine if dates should be adjusted.
         should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
         # Generate the full list of potential dates
@@ -1368,7 +1381,7 @@ class BudgetPlannerApp:
                 item.dates = calculate_bi_monthly_dates_every_two_months(
                     original_start, end_date, holidays, adjust_for_holidays=should_adjust
                 )
-            elif freq not in ['one-time', 'manual']:
+            elif freq not in ['one-time', 'manual', 'weekly']:
                 item.dates = get_recurring_dates(
                     original_start, end_date, freq, holidays, adjust_for_holidays=should_adjust
                 )
