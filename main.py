@@ -357,6 +357,14 @@ class StreamingService(Expense):
         super().__init__(**kwargs)
 
 
+class ProRatedIncome(Expense):
+    """Represents a pro-rated income payment, a specific type of Expense."""
+
+    def __init__(self, **kwargs):
+        kwargs['category'] = 'Income'
+        super().__init__(**kwargs)
+
+
 class Income(FinancialItem):
     """Represents an income source, now with an optional expiry date."""
 
@@ -475,6 +483,10 @@ class Budget:
                     budget.expenses.append(Bill.from_dict(item_data))
                 elif category == 'Streaming Services':
                     budget.expenses.append(StreamingService.from_dict(item_data))
+                # --- NEW LOGIC ---
+                # Handle the special pro-rated income category
+                elif category == 'Income':
+                    budget.expenses.append(ProRatedIncome.from_dict(item_data))
                 else:
                     budget.expenses.append(Expense.from_dict(item_data))
 
@@ -487,19 +499,19 @@ class Budget:
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
+        # --- Pro-rated Paycheck Logic Part 1: Clean up any old pro-rated checks ---
+        # This prevents duplicates if we are recalculating multiple times.
+        self.expenses = [exp for exp in self.expenses if exp.name != "Final Pro-rated Paycheck"]
+
         if self.income:
             income_freq = self.income.frequency
 
-            # Case 1: Twice-monthly frequency
             if income_freq == 'twice-monthly' and self.income.start_date_for_schedule:
-                # Use the user-provided start date for calculation
                 calc_start_date = self.income.start_date_for_schedule
                 self.income.dates = calculate_twice_monthly_dates(calc_start_date, end_date, holidays)
 
-            # Case 2: All other frequencies that rely on a saved start date
             elif self.income.start_date_for_schedule:
                 original_start = self.income.start_date_for_schedule
-
                 if income_freq == 'bi-monthly':
                     self.income.dates = calculate_bi_monthly_dates_every_two_months(
                         original_start, end_date, holidays, adjust_for_holidays=True)
@@ -509,16 +521,13 @@ class Budget:
             else:
                 self.income.dates = []
 
-            # --- NEW LOGIC ---
-            # After calculating dates, filter them by the income's expiry date if it exists.
             if self.income.expiry_date:
                 self.income.dates = [d for d in self.income.dates if d <= self.income.expiry_date]
 
-        # Recalculate Expenses & Savings (This logic remains correct)
+        # Recalculate Expenses & Savings
         items_to_recalculate = self.expenses + self.savings_transfers
         for item in items_to_recalculate:
             freq = item.frequency
-
             should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
 
             if freq == 'match payday' and self.income:
@@ -534,6 +543,45 @@ class Budget:
 
             if hasattr(item, 'expiry_date') and item.expiry_date:
                 item.dates = [d for d in item.dates if d <= item.expiry_date]
+
+        # --- Pro-rated Paycheck Logic Part 2: Calculate and add the new check ---
+        if self.income and self.income.expiry_date and self.income.dates:
+            last_payday = max(self.income.dates)
+
+            # Only create a pro-rated check if the job ends AFTER the last regular payday
+            if self.income.expiry_date > last_payday:
+                pro_rated_days = (self.income.expiry_date - last_payday).days
+
+                freq = self.income.frequency
+                period_days = 0
+                if freq == 'weekly':
+                    period_days = 7
+                elif freq == 'bi-weekly':
+                    period_days = 14
+                elif freq == 'monthly':
+                    days_in_month = calendar.monthrange(last_payday.year, last_payday.month)[1]
+                    period_days = days_in_month
+                elif freq == 'twice-monthly':
+                    days_in_month = calendar.monthrange(last_payday.year, last_payday.month)[1]
+                    period_days = days_in_month / 2.0
+                elif freq == 'quarterly':
+                    period_days = 365.25 / 4
+                elif freq == 'yearly':
+                    period_days = 365.25
+
+                if period_days > 0 and pro_rated_days > 0:
+                    daily_rate = self.income.amount / period_days
+                    pro_rated_amount = daily_rate * pro_rated_days
+
+                    final_pay = ProRatedIncome(
+                        name="Final Pro-rated Paycheck",
+                        amount=-pro_rated_amount,  # Negative amount to represent income
+                        frequency='one-time',
+                        dates=[self.income.expiry_date]
+                    )
+                    self.expenses.append(final_pay)
+                    print(
+                        f"INFO: A final pro-rated paycheck of ${pro_rated_amount:.2f} has been added for {self.income.expiry_date}.")
 
         print("Schedules recalculated.")
 
