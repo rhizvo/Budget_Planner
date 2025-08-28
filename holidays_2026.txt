@@ -1,0 +1,12 @@
+New Year's Day,2026-01-01
+Family Day,2026-02-16
+Good Friday,2026-04-03
+Victoria Day,2026-05-18
+Canada Day,2026-07-01
+B.C. Day,2026-08-03
+Labour Day,2026-09-07
+National Day for Truth and Reconciliation,2026-09-30
+Thanksgiving Day,2026-10-12
+Remembrance Day,2026-11-11
+Christmas Day,2026-12-25
+Boxing Day,2026-12-26

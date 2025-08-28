@@ -1,0 +1,12 @@
+New Year's Day,2027-01-01
+Family Day,2027-02-15
+Good Friday,2027-03-26
+Victoria Day,2027-05-24
+Canada Day,2027-07-01
+B.C. Day,2027-08-02
+Labour Day,2027-09-06
+National Day for Truth and Reconciliation,2027-09-30
+Thanksgiving Day,2027-10-11
+Remembrance Day,2027-11-11
+Christmas Day,2027-12-27
+Boxing Day,2027-12-26
