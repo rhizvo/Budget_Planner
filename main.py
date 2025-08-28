@@ -1415,30 +1415,41 @@ class BudgetPlannerApp:
         Calculates and filters the date schedule for a single financial item.
         This ensures the date list is correct after any modification and respects the expiry date.
         """
-        # Step 1: Regenerate the full list of dates for the budget period
         freq = item.frequency
-        holidays = self.holidays  # The app class has access to the loaded holidays
+        holidays = self.holidays
 
         # --- MODIFIED LOGIC ---
-        # Determine if dates should be adjusted.
-        should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
+        # The entire block has been updated to correctly mirror the main recalculate_schedules method.
+        # This now correctly handles 'twice-monthly' for Income objects.
 
-        # Generate the full list of potential dates
-        if freq == 'match payday' and self.current_user.budget.income:
-            item.dates = self.current_user.budget.income.dates
-        elif item.start_date_for_schedule:
-            original_start = item.start_date_for_schedule
-            if freq == 'bi-monthly':
-                item.dates = calculate_bi_monthly_dates_every_two_months(
-                    original_start, end_date, holidays, adjust_for_holidays=should_adjust
-                )
-            elif freq not in ['one-time', 'manual', 'weekly']:
-                item.dates = get_recurring_dates(
-                    original_start, end_date, freq, holidays, adjust_for_holidays=should_adjust
-                )
+        # Handle Income calculation separately
+        if isinstance(item, Income):
+            if freq == 'twice-monthly' and item.start_date_for_schedule:
+                item.dates = calculate_twice_monthly_dates(item.start_date_for_schedule, end_date, holidays)
+            elif item.start_date_for_schedule:
+                if freq == 'bi-monthly':
+                    item.dates = calculate_bi_monthly_dates_every_two_months(
+                        item.start_date_for_schedule, end_date, holidays, adjust_for_holidays=True)
+                elif freq not in ['one-time', 'manual']:
+                    item.dates = get_recurring_dates(
+                        item.start_date_for_schedule, end_date, freq, holidays, adjust_for_holidays=True)
 
-        # Step 2: Filter the regenerated list based on the item's expiry date
-        # This check is safe for SavingsTransfer as it won't have the attribute
+        # Handle Expenses and Savings Transfers
+        else:
+            should_adjust = (isinstance(item, SavingsTransfer) and item.frequency == 'match payday')
+            if freq == 'match payday' and self.current_user.budget.income:
+                item.dates = self.current_user.budget.income.dates
+            elif item.start_date_for_schedule:
+                if freq == 'bi-monthly':
+                    item.dates = calculate_bi_monthly_dates_every_two_months(
+                        item.start_date_for_schedule, end_date, holidays, adjust_for_holidays=should_adjust
+                    )
+                elif freq not in ['one-time', 'manual']:
+                    item.dates = get_recurring_dates(
+                        item.start_date_for_schedule, end_date, freq, holidays, adjust_for_holidays=should_adjust
+                    )
+
+        # Filter the final, regenerated list by the item's expiry date
         if hasattr(item, 'expiry_date') and item.expiry_date:
             item.dates = [d for d in item.dates if d <= item.expiry_date]
 
