@@ -499,8 +499,7 @@ class Budget:
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
-        # --- Pro-rated Paycheck Logic Part 1: Clean up any old prorated checks ---
-        # This prevents duplicates if we are recalculating multiple times.
+        # --- Pro-rated Paycheck Logic Part 1: Clean up any old pro-rated checks ---
         self.expenses = [exp for exp in self.expenses if exp.name != "Final Pro-rated Paycheck"]
 
         if self.income:
@@ -548,7 +547,6 @@ class Budget:
         if self.income and self.income.expiry_date and self.income.dates:
             last_payday = max(self.income.dates)
 
-            # Only create a prorated check if the job ends AFTER the last regular payday
             if self.income.expiry_date > last_payday:
                 pro_rated_days = (self.income.expiry_date - last_payday).days
 
@@ -562,6 +560,7 @@ class Budget:
                     days_in_month = calendar.monthrange(last_payday.year, last_payday.month)[1]
                     period_days = days_in_month
                 elif freq == 'twice-monthly':
+                    # --- THIS IS THE CORRECTED LINE ---
                     days_in_month = calendar.monthrange(last_payday.year, last_payday.month)[1]
                     period_days = days_in_month / 2.0
                 elif freq == 'quarterly':
@@ -575,7 +574,7 @@ class Budget:
 
                     final_pay = ProRatedIncome(
                         name="Final Pro-rated Paycheck",
-                        amount=-pro_rated_amount,  # Negative amount to represent income
+                        amount=-pro_rated_amount,
                         frequency='one-time',
                         dates=[self.income.expiry_date]
                     )
@@ -861,7 +860,7 @@ class BudgetPlannerApp:
         output_filename = os.path.join(self.current_user.directory, "budget_plan.csv")
 
         report_budget = copy.deepcopy(self.current_user.budget)
-        report_budget.recalculate_schedules(start_date, end_date, self.holidays)
+        report_budget.recalculate_schedules(end_date, self.holidays)
 
         all_expenses_to_process = report_budget.expenses
         all_savings_to_process = report_budget.savings_transfers
