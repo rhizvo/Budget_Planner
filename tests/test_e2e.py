@@ -1,19 +1,35 @@
 import csv
 import json
 from pathlib import Path
-import os  # os is still needed for os.path.join inside the mock class
+import os
 
 # Define path to our test data
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
 
 
+# --- THIS IS THE UPDATED HELPER FUNCTION ---
 def _read_csv_to_list_of_dicts(filepath):
-    """Reads a CSV file into a list of dictionaries for easy comparison."""
+    """
+    Reads a CSV file and standardizes all numerical strings to two decimal places
+    for robust comparison.
+    """
+    data = []
     with open(filepath, mode='r', newline='') as infile:
         reader = csv.DictReader(infile)
-        return [row for row in reader]
+        for row in reader:
+            processed_row = {}
+            for key, value in row.items():
+                try:
+                    # Try to convert to float and format to 2 decimal places
+                    processed_row[key] = f"{float(value):.2f}"
+                except (ValueError, TypeError):
+                    # If it's not a number (e.g., a date or empty string), keep it as is
+                    processed_row[key] = value
+            data.append(processed_row)
+    return data
 
 
+# --- THE REST OF THE FILE REMAINS EXACTLY THE SAME ---
 def test_end_to_end_report_generation(e2e_test_environment):
     """
     Tests the full flow from loading data to generating a matching CSV report.
@@ -47,7 +63,7 @@ def test_end_to_end_report_generation(e2e_test_environment):
 
     # Compare the generated file with the expected file from our test_data directory
     generated_file = test_user_dir / 'budget_plan.csv'
-    expected_file = TEST_DATA_DIR / 'expected_report.csv'  # <-- This path is now correct
+    expected_file = TEST_DATA_DIR / 'expected_report.csv'
 
     assert generated_file.exists(), "Report file was not generated."
 

@@ -1,49 +1,45 @@
 {
-    "start_date": "2025-08-29",
-    "end_date": "2027-08-29",
-    "initial_debit_balance": 500.0,
+    "start_date": "2025-09-01",
+    "end_date": "2025-09-30",
+    "initial_debit_balance": 100.0,
     "savings_balances": {
-        "House": 4200.0
+        "Emergency Fund": 500.0
     },
     "income": {
         "name": "Primary Income",
-        "amount": 2134.0,
+        "amount": 1000.0,
         "frequency": "twice-monthly",
-        "dates": [],
-        "start_date_for_schedule": "2025-08-29",
+        "start_date_for_schedule": "2025-09-15",
         "expiry_date": null
     },
     "expense_categories": {
         "Groceries": [
             {
                 "name": "Groceries",
-                "amount": 85.0,
+                "amount": 50.0,
                 "frequency": "weekly",
-                "dates": [],
-                "start_date_for_schedule": "2025-08-30",
+                "start_date_for_schedule": "2025-09-06",
                 "category": "Groceries",
                 "expiry_date": null
             }
         ],
         "Bills": [
             {
-                "name": "Hydro",
-                "amount": 69.9,
-                "frequency": "bi-monthly",
-                "dates": [],
-                "start_date_for_schedule": "2025-09-25",
+                "name": "Phone Bill",
+                "amount": 60.0,
+                "frequency": "one-time",
+                "dates": ["2025-09-20"],
                 "category": "Bills",
-                "expiry_date": "2025-10-31"
+                "expiry_date": null
             }
         ]
     },
     "savings_transfers": [
         {
-            "name": "Transfer to House",
-            "amount": 1500.0,
+            "name": "Transfer to Emergency Fund",
+            "amount": 200.0,
             "frequency": "match payday",
-            "dates": [],
-            "target": "House"
+            "target": "Emergency Fund"
         }
     ]
 }

@@ -10,7 +10,7 @@ from main import (
 )
 
 
-# --- TEST 1: Test a core date calculation function ---
+# --- This test is unaffected and remains the same ---
 def test_calculate_twice_monthly_dates(holidays):
     """
     Tests the twice-monthly date calculation using the 'holidays' fixture.
@@ -32,25 +32,26 @@ def test_calculate_twice_monthly_dates(holidays):
     print("...OK")
 
 
-# --- TEST 2: Test that the Budget class loads from JSON correctly ---
+# --- THIS IS THE UPDATED TEST ---
 def test_budget_loading_from_dict(budget_data):
     """
-    Tests the Budget.from_dict method using the 'budget_data' fixture.
+    Tests the Budget.from_dict method using our new, verified 'budget_data'.
     """
     print("\nRunning: Unit Test for loading budget from dictionary...")
     budget = Budget.from_dict(budget_data)
 
+    # Assertions are now updated to match the new test case
     assert budget.income is not None
-    assert len(budget.expenses) == 2  # Groceries + Hydro
+    assert len(budget.expenses) == 2  # Groceries + Phone Bill
     assert len(budget.savings_transfers) == 1
-    assert budget.initial_debit_balance == 500.0
-    assert budget.income.amount == 2134.0
-    assert budget.savings_accounts[0].name == "House"
-    assert budget.savings_accounts[0].balance == 4200.0
+    assert budget.initial_debit_balance == 100.0  # <-- Changed from 500.0
+    assert budget.income.amount == 1000.0  # <-- Changed from 2134.0
+    assert budget.savings_accounts[0].name == "Emergency Fund"  # <-- Changed from "House"
+    assert budget.savings_accounts[0].balance == 500.0  # <-- Changed from 4200.0
     print("...OK")
 
 
-# --- TEST 3: Test the pro-rated final paycheck logic ---
+# --- This test is also unaffected and remains the same ---
 def test_pro_rated_final_paycheck(holidays):
     """
     Tests the special case of creating a pro-rated final paycheck.
