@@ -358,7 +358,7 @@ class StreamingService(Expense):
 
 
 class ProRatedIncome(Expense):
-    """Represents a pro-rated income payment, a specific type of Expense."""
+    """Represents a prorated income payment, a specific type of Expense."""
 
     def __init__(self, **kwargs):
         kwargs['category'] = 'Income'
@@ -484,7 +484,7 @@ class Budget:
                 elif category == 'Streaming Services':
                     budget.expenses.append(StreamingService.from_dict(item_data))
                 # --- NEW LOGIC ---
-                # Handle the special pro-rated income category
+                # Handle the special prorated income category
                 elif category == 'Income':
                     budget.expenses.append(ProRatedIncome.from_dict(item_data))
                 else:
@@ -495,11 +495,11 @@ class Budget:
 
         return budget
 
-    def recalculate_schedules(self, start_date, end_date, holidays):
+    def recalculate_schedules(self, end_date, holidays):
         """Recalculates all recurring dates based on the new budget period."""
         print("\nRecalculating all schedules for the new budget period...")
 
-        # --- Pro-rated Paycheck Logic Part 1: Clean up any old pro-rated checks ---
+        # --- Pro-rated Paycheck Logic Part 1: Clean up any old prorated checks ---
         # This prevents duplicates if we are recalculating multiple times.
         self.expenses = [exp for exp in self.expenses if exp.name != "Final Pro-rated Paycheck"]
 
@@ -548,7 +548,7 @@ class Budget:
         if self.income and self.income.expiry_date and self.income.dates:
             last_payday = max(self.income.dates)
 
-            # Only create a pro-rated check if the job ends AFTER the last regular payday
+            # Only create a prorated check if the job ends AFTER the last regular payday
             if self.income.expiry_date > last_payday:
                 pro_rated_days = (self.income.expiry_date - last_payday).days
 
@@ -730,7 +730,7 @@ class BudgetPlannerApp:
             choice = input("Select an option: ")
 
             if choice == '1':
-                self._run_guided_setup(start_date, end_date)
+                self._run_guided_setup(end_date)
             elif choice == '2':
                 new_start, new_end, period_changed = self._manage_categories_menu(start_date, end_date)
                 if period_changed:
@@ -806,7 +806,7 @@ class BudgetPlannerApp:
         if self.holidays:
             print(f"Loaded {len(self.holidays)} holidays across {len(required_years)} year(s).")
 
-        self.current_user.budget.recalculate_schedules(start_date, end_date, self.holidays)
+        self.current_user.budget.recalculate_schedules(end_date, self.holidays)
 
     def _manage_categories_menu(self, start_date, end_date):
         """Shows a menu to manage specific budget categories."""
@@ -829,19 +829,19 @@ class BudgetPlannerApp:
             if choice == '1':
                 self._manage_balances()
             elif choice == '2':
-                self._manage_income(start_date, end_date)
+                self._manage_income(end_date)
             elif choice == '3':
-                self._manage_groceries(start_date, end_date)
+                self._manage_groceries(end_date)
             elif choice == '4':
-                self._manage_expense_category("Bills", Bill, start_date, end_date)
+                self._manage_expense_category("Bills", Bill, end_date)
             elif choice == '5':
-                self._manage_expense_category("Streaming Services", StreamingService, start_date, end_date)
+                self._manage_expense_category("Streaming Services", StreamingService, end_date)
             elif choice == '6':
-                self._manage_expense_category("Misc Monthly", Expense, start_date, end_date)
+                self._manage_expense_category("Misc Monthly", Expense, end_date)
             elif choice == '7':
                 self._manage_one_time()
             elif choice == '8':
-                self._manage_savings_transfers(start_date, end_date)
+                self._manage_savings_transfers(end_date)
             elif choice == '9':
                 new_start, new_end, changed = self._manage_budget_period()
                 if changed:
@@ -967,19 +967,19 @@ class BudgetPlannerApp:
         else:
             print("\nNo financial data to generate report.")
 
-    def _run_guided_setup(self, start_date, end_date):
+    def _run_guided_setup(self, end_date):
         """Runs the user through all management functions sequentially."""
         print("\n--- Guided Budget Setup ---")
         print("Let's walk through all the sections of your budget.")
 
         self._manage_balances()
-        self._manage_income(start_date, end_date)
-        self._manage_groceries(start_date, end_date)
-        self._manage_expense_category("Bills", Bill, start_date, end_date)
-        self._manage_expense_category("Streaming Services", StreamingService, start_date, end_date)
-        self._manage_expense_category("Misc Monthly", Expense, start_date, end_date)
+        self._manage_income(end_date)
+        self._manage_groceries(end_date)
+        self._manage_expense_category("Bills", Bill, end_date)
+        self._manage_expense_category("Streaming Services", StreamingService, end_date)
+        self._manage_expense_category("Misc Monthly", Expense, end_date)
         self._manage_one_time()
-        self._manage_savings_transfers(start_date, end_date)
+        self._manage_savings_transfers(end_date)
 
         print("\n--- Guided Setup Complete ---")
 
@@ -1058,7 +1058,7 @@ class BudgetPlannerApp:
                 else:
                     break
 
-    def _manage_income(self, start_date, end_date):
+    def _manage_income(self, end_date):
         """Handles the logic for adding or updating income information."""
         print("\n--- Income Information ---")
         budget = self.current_user.budget
@@ -1094,7 +1094,7 @@ class BudgetPlannerApp:
                     income_item.expiry_date = None
 
             # After all changes, perform a full recalculation of the income schedule
-            self._update_single_item_schedule(income_item, start_date, end_date)
+            self._update_single_item_schedule(income_item, end_date)
 
         # --- ADD NEW INCOME ---
         else:
@@ -1116,7 +1116,7 @@ class BudgetPlannerApp:
                                 start_date_for_schedule=start_date_for_schedule, expiry_date=expiry_date)
 
             # Calculate its schedule
-            self._update_single_item_schedule(new_income, start_date, end_date)
+            self._update_single_item_schedule(new_income, end_date)
             budget.income = new_income
 
         if not budget.income.dates:
@@ -1128,7 +1128,7 @@ class BudgetPlannerApp:
             if len(budget.income.dates) > 12:
                 print(f"... and {len(budget.income.dates) - 12} more.")
 
-    def _manage_groceries(self, start_date, end_date):
+    def _manage_groceries(self, end_date):
         """Handles the logic for managing grocery expenses."""
         print("\n--- Manage Your Groceries ---")
         budget = self.current_user.budget
@@ -1165,7 +1165,7 @@ class BudgetPlannerApp:
                 )
                 print("Weekly grocery expense has been set up.")
 
-    def _manage_expense_category(self, category_name, expense_class, start_date, end_date):
+    def _manage_expense_category(self, category_name, expense_class, end_date):
         """Generic function to manage an expense category."""
         print(f"\n--- Manage {category_name} ---")
         budget = self.current_user.budget
@@ -1209,7 +1209,7 @@ class BudgetPlannerApp:
 
                             if get_yes_no_input("Do you want to update the payment schedule?"):
                                 # For expenses, we don't adjust for holidays
-                                freq, dates, start_sched = self._get_schedule(start_date, end_date,
+                                freq, dates, start_sched = self._get_schedule(end_date,
                                                                               adjust_for_holidays=False)
                                 if freq:
                                     selected_item.frequency = freq
@@ -1224,7 +1224,7 @@ class BudgetPlannerApp:
                                     selected_item.expiry_date = None
 
                             # Second, recalculate the schedule based on all updated properties
-                            self._update_single_item_schedule(selected_item, start_date, end_date)
+                            self._update_single_item_schedule(selected_item, end_date)
                             print(f"'{selected_item.name}' updated.")
                         else:
                             print("Invalid number.")
@@ -1241,7 +1241,7 @@ class BudgetPlannerApp:
                 if get_yes_no_input(f"Does {name} have an expiry date?"):
                     expiry_date = get_date_input(f"Enter the expiry date for {name}")
 
-                frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
+                frequency, dates, start_date_for_schedule = self._get_schedule(end_date,
                                                                                adjust_for_holidays=False)
                 if frequency is None:
                     print("Item creation cancelled.")
@@ -1327,7 +1327,7 @@ class BudgetPlannerApp:
                 if not get_yes_no_input("Add another one-time expense?"):
                     break
 
-    def _manage_savings_transfers(self, start_date, end_date):
+    def _manage_savings_transfers(self, end_date):
         """Manages adding, modifying, and removing savings transfers."""
         print("\n--- Manage Savings Transfers ---")
         budget = self.current_user.budget
@@ -1367,7 +1367,7 @@ class BudgetPlannerApp:
                                 # --- MODIFIED LOGIC ---
                                 # We set adjust_for_holidays=False because only 'match payday' should adjust,
                                 # and that case is handled automatically inside _get_schedule.
-                                freq, dates, start_sched = self._get_schedule(start_date, end_date,
+                                freq, dates, start_sched = self._get_schedule(end_date,
                                                                               extra_freq_options=freq_opts,
                                                                               adjust_for_holidays=False)
                                 if freq:
@@ -1376,7 +1376,7 @@ class BudgetPlannerApp:
                                     selected_trans.start_date_for_schedule = start_sched
 
                                 # After changes, we must recalculate the item's schedule
-                                self._update_single_item_schedule(selected_trans, start_date, end_date)
+                                self._update_single_item_schedule(selected_trans, end_date)
 
                             print("Transfer updated.")
                         else:
@@ -1398,7 +1398,7 @@ class BudgetPlannerApp:
                 freq_opts = ['match payday'] if budget.income else None
                 # --- MODIFIED LOGIC ---
                 # This should also be False.
-                frequency, dates, start_date_for_schedule = self._get_schedule(start_date, end_date,
+                frequency, dates, start_date_for_schedule = self._get_schedule(end_date,
                                                                                extra_freq_options=freq_opts,
                                                                                adjust_for_holidays=False)
                 if frequency is None:
@@ -1411,7 +1411,7 @@ class BudgetPlannerApp:
                                                start_date_for_schedule=start_date_for_schedule)
 
                 # Recalculate just in case 'match payday' was selected
-                self._update_single_item_schedule(new_transfer, start_date, end_date)
+                self._update_single_item_schedule(new_transfer, end_date)
 
                 budget.savings_transfers.append(new_transfer)
                 print("Savings transfer added.")
@@ -1419,9 +1419,8 @@ class BudgetPlannerApp:
                 if not get_yes_no_input("Add another transfer?"):
                     break
 
-    def _get_schedule(self, start_date, end_date, extra_freq_options=None, adjust_for_holidays=False):
+    def _get_schedule(self, end_date, extra_freq_options=None, adjust_for_holidays=False):
         """Helper to get schedule details for any financial item."""
-        frequency = None
         dates = []
         start_date_for_schedule = None
 
@@ -1458,7 +1457,7 @@ class BudgetPlannerApp:
 
         return frequency, dates, start_date_for_schedule
 
-    def _update_single_item_schedule(self, item, start_date, end_date):
+    def _update_single_item_schedule(self, item, end_date):
         """
         Calculates and filters the date schedule for a single financial item.
         This ensures the date list is correct after any modification and respects the expiry date.
