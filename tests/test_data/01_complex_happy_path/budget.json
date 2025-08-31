@@ -1,0 +1,38 @@
+{
+    "start_date": "2025-10-01",
+    "end_date": "2025-12-31",
+    "initial_debit_balance": 500.0,
+    "savings_balances": {
+        "House Fund": 10000.0,
+        "Vacation Fund": 500.0
+    },
+    "income": {
+        "name": "Primary Income",
+        "amount": 2500.0,
+        "frequency": "twice-monthly",
+        "start_date_for_schedule": "2025-10-15"
+    },
+    "misc_income": [
+        { "name": "Work Bonus", "amount": 1500.0, "frequency": "one-time", "dates": ["2025-11-20"] }
+    ],
+    "expense_categories": {
+        "Bills": [
+            { "name": "Internet", "amount": 90.0, "frequency": "monthly", "start_date_for_schedule": "2025-10-01", "category": "Bills" },
+            { "name": "Hydro", "amount": 75.0, "frequency": "monthly", "start_date_for_schedule": "2025-10-25", "category": "Bills" }
+        ],
+        "Streaming Services": [
+            { "name": "Netflix", "amount": 18.0, "frequency": "monthly", "start_date_for_schedule": "2025-10-10", "category": "Streaming Services" },
+            { "name": "Disney+", "amount": 140.0, "frequency": "yearly", "start_date_for_schedule": "2025-12-05", "category": "Streaming Services" }
+        ],
+        "Groceries": [
+            { "name": "Groceries", "amount": 120.0, "frequency": "weekly", "start_date_for_schedule": "2025-10-04", "category": "Groceries" }
+        ],
+        "Misc Monthly": [
+            { "name": "Gas", "amount": 60.0, "frequency": "bi-weekly", "start_date_for_schedule": "2025-10-03", "category": "Misc Monthly" }
+        ]
+    },
+    "savings_transfers": [
+        { "name": "Transfer to House Fund", "amount": 800.0, "frequency": "match payday", "target": "House Fund" },
+        { "name": "Transfer to Vacation Fund", "amount": 150.0, "frequency": "monthly", "start_date_for_schedule": "2025-10-05", "target": "Vacation Fund" }
+    ]
+}
