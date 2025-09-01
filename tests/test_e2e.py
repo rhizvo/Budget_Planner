@@ -75,5 +75,7 @@ def test_end_to_end_report_generation(e2e_test_environment, test_case_dir):
     generated_data = _read_csv_to_list_of_dicts(generated_file)
     expected_data = _read_csv_to_list_of_dicts(expected_file)
 
+    assert set(generated_data[0].keys()) == set(expected_data[0].keys()), "CSV headers don’t match"
+
     assert generated_data == expected_data
     print(f"...OK: {test_case_dir.name}")
