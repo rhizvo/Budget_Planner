@@ -78,3 +78,17 @@ def test_pro_rated_final_paycheck(holidays):
     assert final_pay_expense.dates[0] == date(2026, 1, 20)
     assert final_pay_expense.amount == approx(expected_amount, 0.01)
     print("...OK")
+
+
+def test_one_time_income_dates_preserved_without_start(apply_holidays_fixture=None):
+    from main import Budget, Income
+    b = Budget(
+        start_date=date(2025, 10, 6),
+        end_date=date(2025, 10, 7),
+        initial_debit_balance=0.0
+    )
+    one_time_date = date(2025, 10, 6)
+    b.income = Income(name="Primary Income", amount=100.0, frequency="one-time",
+                      dates=[one_time_date], start_date_for_schedule=None)
+    b.recalculate_schedules(b.end_date, holidays=[])  # or your holiday list
+    assert b.income.dates == [one_time_date]

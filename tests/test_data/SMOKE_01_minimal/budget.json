@@ -1,0 +1,18 @@
+{
+  "start_date": "2025-10-06",
+  "end_date": "2025-10-07",
+  "initial_debit_balance": 0.0,
+
+  "misc_income": [
+    { "name": "Test Income", "amount": 100.0, "frequency": "one-time", "dates": ["2025-10-06"] }
+  ],
+
+  "expense_categories": {
+    "Bills": [
+      { "name": "Coffee Grinder", "amount": 30.0, "frequency": "one-time", "dates": ["2025-10-07"], "category": "Bills" }
+    ]
+  },
+
+  "savings_transfers": [],
+  "savings_balances": {}
+}

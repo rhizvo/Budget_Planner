@@ -523,7 +523,8 @@ class Budget:
                 elif income_freq not in ['one-time', 'manual']:
                     self.income.dates = get_recurring_dates(
                         original_start, end_date, income_freq, holidays, adjust_for_holidays=True)
-            else:
+            elif income_freq not in ['one-time', 'manual']:
+                # No start date to build a recurring schedule → clear to avoid stale dates
                 self.income.dates = []
 
             if self.income.expiry_date:
