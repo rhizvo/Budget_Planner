@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 import calendar
 import os
@@ -8,7 +8,12 @@ import shutil
 import copy
 
 
-# --- Helper Functions (Remain largely unchanged) ---
+# --- Helper Functions  ---
+
+# Centralized clock for deterministic tests
+def _today() -> date:
+    return datetime.now().date()
+
 
 def get_date_input(prompt, start_after=None):
     """Helper function to get a valid date input, with optional validation."""
@@ -175,7 +180,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             current_iter_date = datetime(year, month + 1, 1).date()
 
     dates = sorted(list(set(dates)))
-    return [d for d in dates if d >= datetime.now().date()]
+    return [d for d in dates if d >= _today()]
 
 
 def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set, adjust_for_holidays=True):
@@ -202,7 +207,7 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
         day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
         current_date = datetime(new_year, new_month, day).date()
 
-    return [d for d in dates if d >= datetime.now().date()]
+    return [d for d in dates if d >= _today()]
 
 
 def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=False):
@@ -222,7 +227,7 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adju
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
 
-        if adjusted_date >= datetime.now().date():
+        if adjusted_date >= _today():
             dates.append(adjusted_date)
 
         # Calculation for the next date remains the same
@@ -588,6 +593,7 @@ class Budget:
                         f"INFO: A final pro-rated paycheck of ${pro_rated_amount:.2f} has been added for {self.income.expiry_date}.")
 
         print("Schedules recalculated.")
+
 
 class User:
     """Manages user data, including loading and saving their budget."""

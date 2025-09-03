@@ -2,11 +2,21 @@ import pytest
 import json
 import os
 import shutil
+from datetime import date
 from pathlib import Path
 
 # Define key paths
 PROJECT_ROOT = Path(__file__).parent.parent
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
+
+
+@pytest.fixture(autouse=True)
+def _freeze_today(monkeypatch):
+    """
+    Make 'today' deterministic in tests so date filters don't change as time passes.
+    """
+    import main
+    monkeypatch.setattr(main, "_today", lambda: date(2001, 1, 4))
 
 
 @pytest.fixture(scope="session")
