@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 TESTS_DIR = Path(__file__).parent
 HAPPY_PATH_DIR = TESTS_DIR / "test_data" / "00_happy_path"  # reuse a stable case
 
@@ -140,3 +139,60 @@ def test_multi_user_data_isolation(e2e_test_environment):
     a_rows_2 = _read_csv_to_list_of_dicts(a_csv_2)
 
     assert a_rows_1 == a_rows_2, "UserA's report changed after modifying UserB (isolation failure)."
+
+
+@pytest.mark.integration
+def test_user_specific_holiday_calendars_do_not_leak(e2e_test_environment):
+    base = e2e_test_environment
+    user_a = base / "amy"
+    user_b = base / "ben"
+
+    # Prepare holidays for both users (copy the shared set)
+    _copy_holidays_into(user_a, base)
+    _copy_holidays_into(user_b, base)
+
+    # Load the stable happy-path budget for both
+    with open(HAPPY_PATH_DIR / "budget.json", "r") as f:
+        base_budget = json.load(f)
+    _write_budget(user_a, base_budget)
+    _write_budget(user_b, base_budget)
+
+    # First generate A and snapshot bytes (baseline)
+    a_csv_path = _generate_report_for(user_a)
+    assert a_csv_path.exists()
+    a_before = a_csv_path.read_bytes()
+
+    # Inject an extra holiday for B: 2025-09-15 (forces payday to move earlier)
+    b_h_2025 = user_b / "holidays" / "holidays_2025.txt"
+    with open(b_h_2025, "a", newline="") as f:
+        f.write("\nTest Holiday,2025-09-15\n")
+
+    # Generate A and B reports after B's unique holiday
+    a_csv_path_after = _generate_report_for(user_a)
+    b_csv_path = _generate_report_for(user_b)
+    assert b_csv_path.exists()
+
+    a_rows = _read_csv_to_list_of_dicts(a_csv_path_after)
+    b_rows = _read_csv_to_list_of_dicts(b_csv_path)
+
+    def _row(rows, week_start_str):
+        for r in rows:
+            if r.get("Week Start Date") == week_start_str:
+                return r
+        raise AssertionError(f"Row for Week Start Date {week_start_str} not found")
+
+    # A: no extra holiday => income remains in week starting 2025-09-15
+    a_wk_0915 = _row(a_rows, "2025-09-15")
+    assert a_wk_0915["Income Received"] == "1000.00"
+
+    # B: 2025-09-15 is a holiday => payday moved to previous business day (Fri 2025-09-12)
+    # which falls in the week starting 2025-09-08
+    b_wk_0908 = _row(b_rows, "2025-09-08")
+    assert b_wk_0908["Income Received"] == "1000.00"
+
+    # And in B, the week of 2025-09-15 should not have that income
+    b_wk_0915 = _row(b_rows, "2025-09-15")
+    assert b_wk_0915["Income Received"] == "0.00"
+
+    # Finally: A's report bytes must be identical to its original baseline
+    assert a_csv_path_after.read_bytes() == a_before, "User A's report changed due to User B's holidays."

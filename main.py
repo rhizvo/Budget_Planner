@@ -159,8 +159,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             adjusted_date = target_15th
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
-            if adjusted_date >= start_date:
-                dates.append(adjusted_date)
+            dates.append(adjusted_date)
 
         last_day_of_month_num = calendar.monthrange(year, month)[1]
         target_last_day = datetime(year, month, last_day_of_month_num).date()
@@ -168,8 +167,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             adjusted_date = target_last_day
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
-            if adjusted_date >= start_date:
-                dates.append(adjusted_date)
+            dates.append(adjusted_date)
 
         if month == 12:
             current_iter_date = datetime(year + 1, 1, 1).date()
