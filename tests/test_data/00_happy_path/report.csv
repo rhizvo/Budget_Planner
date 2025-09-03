@@ -1,0 +1,6 @@
+Week of Year,Week Start Date,Week End Date,Income Received,Total Weekly Expenses,Total Savings Transferred,Running Balance at End of Week,Saved Amount at End of Week (Emergency Fund),Savings Transferred (Emergency Fund),Bills: Phone Bill,Groceries: Groceries
+36,2025-09-01,2025-09-07,0.00,50.00,0.00,50.00,500.00,,,"50.00"
+37,2025-09-08,2025-09-14,0.00,50.00,0.00,0.00,500.00,,,"50.00"
+38,2025-09-15,2025-09-21,1000.00,110.00,200.00,690.00,700.00,200.00,60.00,50.00
+39,2025-09-22,2025-09-28,0.00,50.00,0.00,640.00,700.00,,,"50.00"
+40,2025-09-29,2025-10-05,1000.00,0.00,200.00,1440.00,900.00,200.00,,

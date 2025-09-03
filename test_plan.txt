@@ -1,0 +1,96 @@
+## Comprehensive Test Plan for Budget Planner 📋
+This plan outlines a suite of tests to ensure the application is thoroughly validated, covering everything from basic functions to complex, real-world scenarios.
+
+---
+
+### Category 1: Smoke Tests
+**Goal:** To ensure the application runs and performs its most basic functions without crashing.
+
+* **Case SMOKE-01: Core Functionality Check**
+    * **Test Type:** Smoke Test
+    * **Objective:** Verify that the application can process a minimal budget with one income and one expense and generate a report.
+    * **Scenario:**
+        * A 2-day budget period.
+        * One one-time income.
+        * One one-time expense.
+    * **Key Verification Points:** The application generates a CSV file with the correct final balance.
+
+---
+
+### Category 2: Happy Path Tests
+**Goal:** To confirm the application works as expected under normal, typical usage conditions.
+
+* **Case HAPPY-01: Standard Monthly Budget**
+    * **Test Type:** Happy Path (Medium Complexity)
+    * **Objective:** Verify correct calculations for a standard, representative month.
+    * **Scenario:**
+        * A one-month budget period.
+        * Includes twice-monthly income, weekly and one-time expenses, and match payday savings transfers.
+    * **Key Verification Points:** Weekly balances and savings totals match manual calculations.
+
+* **Case HAPPY-02: Complex Real-World Simulation**
+    * **Test Type:** Happy Path (High Complexity)
+    * **Objective:** To simulate a realistic, busy budget with multiple overlapping items to ensure the system handles complexity correctly.
+    * **Scenario:**
+        * A 3-month budget period.
+        * Two separate savings accounts.
+        * One primary twice-monthly income and a one-time "Work Bonus" income.
+        * Multiple recurring bills (monthly Hydro, monthly Internet).
+        * Multiple streaming services (monthly, yearly).
+        * Weekly Groceries and bi-weekly miscellaneous expenses.
+        * A match payday savings transfer and a fixed monthly savings transfer to different accounts.
+    * **Key Verification Points:** All transactions are correctly recorded; both savings account balances are calculated correctly and independently; the running debit balance is accurate throughout.
+
+---
+
+### Category 3: Feature Coverage Tests
+**Goal:** To systematically test specific features of the application, particularly those with multiple options like frequency.
+
+* **Cases FEAT-01 through FEAT-08: Frequency Verification**
+    * **Test Type:** Feature Coverage
+    * **Objective:** To verify that each expense and income frequency is calculated correctly and independently.
+    * **Scenario:** A series of small, isolated tests, each with a 1-year budget period and a single expense item using one specific frequency (weekly, bi-weekly, monthly, bi-monthly, quarterly, yearly, twice-monthly).
+    * **Key Verification Points:** The generated report shows the expense occurring on the exact dates dictated by its frequency rule.
+
+* **Case FEAT-09: Dynamic Period Change**
+    * **Test Type:** Feature Coverage
+    * **Objective:** To ensure that when a user changes their budget period, all schedules are correctly recalculated.
+    * **Scenario:**
+        * Define a budget for Jan 1 - Mar 31 with a monthly bill.
+        * Simulate the user changing the period to Feb 1 - Apr 30.
+        * Generate the "after" report.
+    * **Key Verification Points:** The "after" report must not contain the January bill but must include the new April bill.
+
+---
+
+### Category 4: Edge Case Tests
+**Goal:** To test the application's limits and its handling of unusual or tricky situations.
+
+* **Case EDGE-01: Pro-Rated Income Expiry**
+    * **Test Type:** Edge Case
+    * **Objective:** Verify the complex calculation for a final, pro-rated paycheck when an income source expires mid-pay-period.
+    * **Scenario:** An income source expires a few days after the last full payday.
+    * **Key Verification Points:** A Final Pro-rated Paycheck expense is created with the correct negative amount on the exact expiry date.
+
+* **Case EDGE-02: Leap Year & Holiday Adjustment**
+    * **Test Type:** Edge Case
+    * **Objective:** Verify that date calculations correctly handle leap years and that paydays falling on holidays are properly adjusted.
+    * **Scenario:**
+        * A budget period spanning Feb 2028 - Mar 2028 (2028 is a leap year).
+        * A monthly bill scheduled for the 29th of each month.
+        * An income source with a payday that would normally fall on a holiday.
+    * **Key Verification Points:** The bill for Feb 2028 occurs on Feb 29th; the payday is correctly moved to the preceding business day.
+
+---
+
+### Category 5: Integration Tests
+**Goal:** To test how different parts of the application work together, specifically user data isolation.
+
+* **Case INT-01: Multi-User Data Isolation**
+    * **Test Type:** Integration Test
+    * **Objective:** Verify that the data for one user is completely isolated and unaffected by changes to another user's data.
+    * **Scenario:**
+        * Set up and generate a report for UserA.
+        * Set up and make changes to UserB.
+        * Re-generate the report for UserA.
+    * **Key Verification Points:** The new report for UserA is identical to their original report.

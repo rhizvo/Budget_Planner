@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 import calendar
 import os
@@ -8,7 +8,12 @@ import shutil
 import copy
 
 
-# --- Helper Functions (Remain largely unchanged) ---
+# --- Helper Functions  ---
+
+# Centralized clock for deterministic tests
+def _today() -> date:
+    return datetime.now().date()
+
 
 def get_date_input(prompt, start_after=None):
     """Helper function to get a valid date input, with optional validation."""
@@ -159,8 +164,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             adjusted_date = target_15th
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
-            if adjusted_date >= start_date:
-                dates.append(adjusted_date)
+            dates.append(adjusted_date)
 
         last_day_of_month_num = calendar.monthrange(year, month)[1]
         target_last_day = datetime(year, month, last_day_of_month_num).date()
@@ -168,8 +172,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             adjusted_date = target_last_day
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
-            if adjusted_date >= start_date:
-                dates.append(adjusted_date)
+            dates.append(adjusted_date)
 
         if month == 12:
             current_iter_date = datetime(year + 1, 1, 1).date()
@@ -177,7 +180,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
             current_iter_date = datetime(year, month + 1, 1).date()
 
     dates = sorted(list(set(dates)))
-    return [d for d in dates if d >= datetime.now().date()]
+    return [d for d in dates if d >= _today()]
 
 
 def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set, adjust_for_holidays=True):
@@ -204,7 +207,7 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
         day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
         current_date = datetime(new_year, new_month, day).date()
 
-    return [d for d in dates if d >= datetime.now().date()]
+    return [d for d in dates if d >= _today()]
 
 
 def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=False):
@@ -224,7 +227,7 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adju
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
 
-        if adjusted_date >= datetime.now().date():
+        if adjusted_date >= _today():
             dates.append(adjusted_date)
 
         # Calculation for the next date remains the same
@@ -447,6 +450,7 @@ class Budget:
         self.income = None
         self.expenses = []
         self.savings_transfers = []
+        self.misc_income = []
 
     def to_dict(self):
         return {
@@ -455,6 +459,7 @@ class Budget:
             'initial_debit_balance': self.initial_debit_balance,
             'savings_balances': {sa.name: sa.balance for sa in self.savings_accounts},
             'income': self.income.to_dict() if self.income else {},
+            'misc_income': [mi.to_dict() for mi in self.misc_income],
             'expense_categories': self._expenses_to_dict(),
             'savings_transfers': [st.to_dict() for st in self.savings_transfers]
         }
@@ -476,6 +481,10 @@ class Budget:
 
         if data.get('income') and data['income'].get('amount'):
             budget.income = Income.from_dict(data['income'])
+
+        for item_data in data.get('misc_income', []):
+            # We can reuse the generic FinancialItem for this
+            budget.misc_income.append(FinancialItem.from_dict(item_data))
 
         for category, items in data.get('expense_categories', {}).items():
             for item_data in items:
@@ -517,7 +526,8 @@ class Budget:
                 elif income_freq not in ['one-time', 'manual']:
                     self.income.dates = get_recurring_dates(
                         original_start, end_date, income_freq, holidays, adjust_for_holidays=True)
-            else:
+            elif income_freq not in ['one-time', 'manual']:
+                # No start date to build a recurring schedule → clear to avoid stale dates
                 self.income.dates = []
 
             if self.income.expiry_date:
@@ -583,6 +593,7 @@ class Budget:
                         f"INFO: A final pro-rated paycheck of ${pro_rated_amount:.2f} has been added for {self.income.expiry_date}.")
 
         print("Schedules recalculated.")
+
 
 class User:
     """Manages user data, including loading and saving their budget."""
@@ -864,6 +875,7 @@ class BudgetPlannerApp:
 
         all_expenses_to_process = report_budget.expenses
         all_savings_to_process = report_budget.savings_transfers
+        all_misc_income_to_process = report_budget.misc_income
         all_income_paydates = report_budget.income.dates if report_budget.income else []
 
         start_of_first_week = start_date - timedelta(days=start_date.weekday())
@@ -895,13 +907,17 @@ class BudgetPlannerApp:
                     if week_start <= pay_date <= week_end:
                         weekly_income += report_budget.income.amount
 
+            for item in all_misc_income_to_process:
+                for income_date in item.dates:
+                    if week_start <= income_date <= week_end:
+                        # The amount in budget.json is positive, so just add it.
+                        weekly_income += item.amount
+
             for item in all_expenses_to_process:
                 should_apply_expense_this_week = False
                 if item.expiry_date and week_start > item.expiry_date:
                     continue
 
-                # --- MODIFIED LOGIC ---
-                # Removed the special case for 'weekly'. All frequencies now rely on the 'dates' list.
                 if item.dates:
                     for expense_date in item.dates:
                         if week_start <= expense_date <= week_end:
@@ -915,7 +931,6 @@ class BudgetPlannerApp:
 
             for s_transfer in all_savings_to_process:
                 should_apply_savings_this_week = False
-                # We can remove the 'weekly' special case here too for consistency, though it had no effect
                 if s_transfer.dates:
                     for s_date in s_transfer.dates:
                         if week_start <= s_date <= week_end:
@@ -958,10 +973,15 @@ class BudgetPlannerApp:
             expense_keys = sorted([k for k in all_keys if k not in ordered_keys_initial and k not in savings_keys])
             final_keys = ordered_keys_initial + savings_keys + expense_keys
 
+            standardized_financial_data = []
+            for row in financial_data:
+                standardized_row = {key: row.get(key, '') for key in final_keys}
+                standardized_financial_data.append(standardized_row)
+
             with open(output_filename, 'w', newline='') as output_file:
-                dict_writer = csv.DictWriter(output_file, fieldnames=final_keys, extrasaction='ignore')
+                dict_writer = csv.DictWriter(output_file, fieldnames=final_keys)
                 dict_writer.writeheader()
-                dict_writer.writerows(financial_data)
+                dict_writer.writerows(standardized_financial_data)
             print(f"\nBudget plan report generated as '{output_filename}'.")
         else:
             print("\nNo financial data to generate report.")
