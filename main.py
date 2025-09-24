@@ -179,8 +179,7 @@ def calculate_twice_monthly_dates(start_date, end_date, holidays_set):
         else:
             current_iter_date = datetime(year, month + 1, 1).date()
 
-    dates = sorted(list(set(dates)))
-    return [d for d in dates if d >= _today()]
+    return sorted(list(set(dates)))
 
 
 def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_set, adjust_for_holidays=True):
@@ -207,7 +206,7 @@ def calculate_bi_monthly_dates_every_two_months(start_date, end_date, holidays_s
         day = min(current_date.day, calendar.monthrange(new_year, new_month)[1])
         current_date = datetime(new_year, new_month, day).date()
 
-    return [d for d in dates if d >= _today()]
+    return sorted(list(set(dates)))
 
 
 def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adjust_for_holidays=False):
@@ -227,8 +226,7 @@ def get_recurring_dates(start_date, end_date, frequency, holidays_set=None, adju
             while not is_business_day(adjusted_date, holidays_set):
                 adjusted_date -= timedelta(days=1)
 
-        if adjusted_date >= _today():
-            dates.append(adjusted_date)
+        dates.append(adjusted_date)
 
         # Calculation for the next date remains the same
         if frequency == 'weekly':
